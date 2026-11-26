@@ -14,7 +14,7 @@
  *   # ich_titel: Meine Spiele
  */
 (() => {
-  const VERSION = "1.8.0";
+  const VERSION = "1.9.0";
   const TAG = "mg-poker-dashboard";
 
   const DEFAULTS = {
@@ -80,7 +80,7 @@
   };
 
   const STYLE = `
-    :host { display:block; }
+    :host { display:block; min-width:0; max-width:100%; contain:inline-size; }
     * { box-sizing:border-box; }
     .wrap {
       min-height:100%; padding:22px; color:${C.text};
@@ -253,8 +253,24 @@
     .el .ew { font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
     .el.sieg { background:${C.gold}14; box-shadow:inset 0 0 0 1px ${C.gold}55; }
     .el.sieg .en::after { content:" ♛"; color:${C.gold}; font-size:11px; }
-    .lmeta { font-size:12.5px; color:${C.muted}; margin-top:10px; }
-    .lmeta b { color:${C.text}; font-weight:600; }
+    .ltab-wrap { overflow-x:auto; }
+    .ltab { width:100%; border-collapse:separate; border-spacing:0; font-variant-numeric:tabular-nums; color:${C.text}; font-size:14px; font-family:inherit; }
+    .ltab th { font-size:10.5px; letter-spacing:1px; text-transform:uppercase; color:${C.muted}; font-weight:600; padding:0 8px 6px; text-align:right; }
+    .ltab td.num { text-align:right; }
+    .ltab th.links, .ltab td.links { text-align:left; }
+    .ltab td { padding:6px 8px; border-top:1px solid ${C.tileBorder}; white-space:nowrap; }
+    .ltab td.n { font-weight:600; }
+    .ltab td.ein { color:#b9bfcb; }
+    .ltab td.g { font-weight:700; }
+    .ltab tr.sieg td { background:${C.gold}12; }
+    .ltab tr.sieg td:first-child { box-shadow:inset 2px 0 0 ${C.gold}; }
+    .ltab tr.sieg td.n::after { content:" ♛"; color:${C.gold}; font-size:11px; }
+    .ltab tfoot td { border-top:1px solid rgba(255,255,255,0.2); font-weight:700; font-size:13px; color:${C.muted}; }
+    .lstats { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; margin-top:12px; }
+    .ls { background:${C.tile}; border:1px solid ${C.tileBorder}; border-radius:12px; padding:7px 10px; min-width:0; }
+    .lsl { font-size:10px; letter-spacing:1px; text-transform:uppercase; color:${C.muted}; }
+    .lsv { font-size:16px; font-weight:700; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .lss { font-size:11px; color:${C.muted}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     textarea { font:inherit; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:12px; color:${C.text}; background:${C.tile};
       border:1px solid ${C.tileBorder}; border-radius:12px; padding:10px 12px; width:100%; resize:vertical; white-space:pre; overflow:auto; color-scheme:dark; }
     textarea:focus { border-color:${C.gold}88; outline:none; }
@@ -310,12 +326,11 @@
       .seite-uebersicht .fill { flex:1; min-height:0; }
       .seite-uebersicht .fillbody { flex:1; overflow:auto; }
       .seite-uebersicht .chartbox { height:auto; overflow:hidden; }
-      .seite-uebersicht .paar { gap:14px; flex:1.25; min-height:0; }
+      .seite-uebersicht .paar { gap:14px; flex:1.5; min-height:0; }
       .seite-uebersicht .col:last-child > .fill { flex:1; }
       .seite-uebersicht .paar > .card { display:flex; flex-direction:column; min-height:0; overflow:auto; }
-      .seite-uebersicht .paar .ergl { gap:6px 16px; }
-      .seite-uebersicht .paar .el { font-size:14.5px; padding:6px 10px; }
-      .seite-uebersicht .paar .lmeta { font-size:13px; margin-top:12px; }
+      .seite-uebersicht .paar > .card > * { flex-shrink:0; }
+      .seite-uebersicht .paar .ltab td { padding:7px 8px; }
       .seite-uebersicht .paar .aktionen { margin-top:auto; padding-top:10px; }
       .seite-uebersicht .rekorde.r6 { gap:8px; }
       .seite-uebersicht .row { padding:6px 0; }
@@ -340,14 +355,19 @@
     }
 
     /* niedrige Fenster (Laptop): weiter verdichten */
-    @media (min-width: 1100px) and (min-height: 640px) and (max-height: 820px) {
+    @media (min-width: 1100px) and (min-height: 640px) and (max-height: 900px) {
       .seite-uebersicht .rs { display:none; }
       .seite-uebersicht .row { padding:6px 0; }
       .seite-uebersicht .meta .ts { display:none; }
       .seite-uebersicht .paar { flex:2.1; }
-      .seite-uebersicht .paar .el { font-size:13.5px; padding:3px 8px; }
-      .seite-uebersicht .paar .ergl { gap:2px 14px; }
-      .seite-uebersicht .paar .lmeta { margin-top:8px; font-size:12px; }
+      .seite-uebersicht .paar .ltab { font-size:13px; }
+      .seite-uebersicht .paar .ltab td { padding:3px 6px; }
+      .seite-uebersicht .paar .ltab th { padding:0 6px 4px; }
+      .seite-uebersicht .paar .lstats { margin-top:8px; gap:6px; }
+      .seite-uebersicht .paar .ls { padding:5px 8px; }
+      .seite-uebersicht .paar .lsv { font-size:14px; }
+      .seite-uebersicht .paar .lss { display:none; }
+      .seite-uebersicht .paar .ltab tfoot { display:none; }
       .seite-uebersicht .paar .aktionen { padding-top:6px; }
       .seite-uebersicht .tile.rk { padding:6px 10px; }
       .seite-uebersicht .tile.rk .tv { font-size:15px; }
@@ -374,6 +394,7 @@
       .f4 { grid-template-columns:1fr 1fr; }
       .f4 label:first-child { grid-column:1 / -1; }
       .f2, .f3 { grid-template-columns:1fr; }
+      .lstats { grid-template-columns:repeat(2, minmax(0,1fr)); }
       .zr { grid-template-columns:minmax(0,1fr) 92px 92px; }
       .zh { display:none; }
       .rekorde.r3 { grid-template-columns:repeat(2,minmax(0,1fr)); }
@@ -1344,15 +1365,35 @@
     _letzter(d) {
       const l = d.letzter;
       if (!l) return `<div class="h">Letzter Spieltag</div><div class="leer">Noch kein Spieltag gespeichert.</div>`;
-      const zeit = zeitText(l.beginn, l.ende, true);
-      const kopf = [datumDe(l.datum), l.ort, l.bezeichnung].filter(Boolean).join(" · ");
+      const kopf = [`${WT[new Date(l.datum + "T12:00:00").getDay()]} ${datumDe(l.datum)}`, l.ort, l.bezeichnung].filter(Boolean).join(" · ");
       const maxG = Math.max(...l.ergebnisse.map((e) => e.gewinn));
-      const zeilen = l.ergebnisse.map((e) => `<div class="el ${e.gewinn === maxG && maxG > 0 ? "sieg" : ""}">
-          <span class="en">${esc(e.name)}</span><span class="ew" style="color:${vz(e.gewinn)}">${eur(e.gewinn)}</span></div>`).join("");
-      const meta = [`Topf <b>${zahl(l.topf, 0)} €</b>`, `${l.ergebnisse.length} Spieler`, l.dauer_h ? `<b>${zahl(l.dauer_h, 1)} h</b>${zeit ? ` (${zeit})` : ""}` : "", l.blinds ? `Blinds ${esc(l.blinds)}` : ""].filter(Boolean).join(" · ");
-      return `<div class="h">Letzter Spieltag <small>${esc(kopf)}</small></div>
-        <div class="ergl">${zeilen}</div>
-        <div class="lmeta">${meta}</div>
+      const zeilen = l.ergebnisse.map((e) => `<tr class="${e.gewinn === maxG && maxG > 0 ? "sieg" : ""}">
+          <td class="links n">${esc(e.name)}</td>
+          <td class="num ein">${zahl(e.einsatz, 2)}</td>
+          <td class="num ein">${zahl(e.endstand, 2)}</td>
+          <td class="num g" style="color:${vz(e.gewinn)}">${eur(e.gewinn).replace(" €", "")}</td></tr>`).join("");
+      const sumE = l.ergebnisse.reduce((a, e) => a + e.einsatz, 0);
+      const sumS = l.ergebnisse.reduce((a, e) => a + e.endstand, 0);
+      const diff = Math.round((sumS - sumE) * 100) / 100;
+      const stat = (label, wert, sub = "") => `<div class="ls"><div class="lsl">${label}</div><div class="lsv">${wert}</div>${sub ? `<div class="lss">${sub}</div>` : ""}</div>`;
+      const stats = [
+        stat("Topf", `${zahl(l.topf, 0)} €`, `Ø ${zahl(l.topf / l.ergebnisse.length, 0)} € p. P.`),
+        stat("Spieler", l.ergebnisse.length, `${l.ergebnisse.filter((e) => e.gewinn > 0).length} im Plus`),
+        stat("Dauer", l.dauer_h ? `${zahl(l.dauer_h, 1)} h` : "–", zeitText(l.beginn, l.ende) || "keine Uhrzeit"),
+        stat("Blinds", l.blinds ? esc(l.blinds) : "–", sieger(l)),
+      ].join("");
+      function sieger(t) {
+        const s = t.ergebnisse[0];
+        return s && s.gewinn > 0 ? `♛ ${esc(s.name)}` : "";
+      }
+      return `<div class="h">Letzter Spieltag <span class="hr"><small>${esc(kopf)}</small></span></div>
+        <div class="ltab-wrap"><table class="ltab">
+          <thead><tr><th class="links">Spieler</th><th class="num">Einsatz</th><th class="num">Endstand</th><th class="num">Gewinn</th></tr></thead>
+          <tbody>${zeilen}</tbody>
+          <tfoot><tr><td class="links">Summe</td><td class="num">${zahl(sumE, 2)}</td><td class="num">${zahl(sumS, 2)}</td>
+            <td class="num" style="color:${Math.abs(diff) < 0.005 ? C.muted : C.red}">${Math.abs(diff) < 0.005 ? "±0,00" : eur(diff).replace(" €", "")}</td></tr></tfoot>
+        </table></div>
+        <div class="lstats">${stats}</div>
         <div class="aktionen"><button class="link edit" id="bearbeiten">Bearbeiten</button><button class="link" id="loeschen">Löschen</button></div>`;
     }
 
