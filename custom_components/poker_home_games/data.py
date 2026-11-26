@@ -351,6 +351,7 @@ class PokerData:
             "letzter_spieltag": self.spieltag_info(tage[-1]) if tage else None,
             "verlauf": verlauf,
             "orte": self._orte(tage),
+            "nach_ort": self._nach_ort(tage),
             "aktualisiert": self._stand,
             "anzahl_sessions": len(self.sessions),
             "spieler_liste": [
@@ -503,6 +504,27 @@ class PokerData:
         if importiert:
             await self.async_save()
         return {"importiert": importiert, "uebersprungen": uebersprungen, "fehler": fehler}
+
+    def _nach_ort(self, tage: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+        """Gewinn und Spiele je Spieler, getrennt nach Spielort."""
+        orte: dict[str, dict[str, dict[str, Any]]] = {}
+        for tag in tage:
+            ort = (tag.get("ort") or "").strip()
+            if not ort:
+                continue
+            for erg in tag["ergebnisse"]:
+                pid = erg["spieler"]
+                w = orte.setdefault(ort, {}).setdefault(
+                    pid,
+                    {"id": pid, "name": self.spieler.get(pid, {}).get("name", pid),
+                     "gewinn": 0.0, "spiele": 0},
+                )
+                w["gewinn"] = _r(w["gewinn"] + erg["gewinn"])
+                w["spiele"] += 1
+        return {
+            ort: sorted(werte.values(), key=lambda w: -w["gewinn"])
+            for ort, werte in orte.items()
+        }
 
     @staticmethod
     def _orte(tage: list[dict[str, Any]]) -> list[str]:

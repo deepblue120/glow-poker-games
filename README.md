@@ -8,6 +8,8 @@ Home-Assistant-Integration für die Ergebnisse von Poker-Home-Games – mit eige
 - Ewige Tabelle mit Gewinn, Ø pro Spieltag, ROI, Gewinnquote und Gewinn pro Stunde
 - Podium, letzter Spieltag, Verlaufsgraph und Rekorde in einer Panel-Karte
 - Übersicht passt im Browser komplett auf einen Bildschirm (ideal für Screenshots)
+- Podium umschaltbar: Gesamt, Ø pro Spiel (ab 5 Spielen) oder nach Spielort
+- Spiele über Mitternacht: Endzeit vor Startzeit = Ende am Folgetag (wird im Dialog angezeigt, in Listen mit „+1“)
 - Zweite Seite „Alle Spiele“ als Tagesübersicht wie in Excel: eine Zeile pro Spieltag, pro Spieler Einsatz, Gewinn und optional Endstand, Summenzeile; sortierbar nach Datum, höchstem Gewinn/Verlust, Gesamteinsatz oder per Klick auf jede Spielerspalte; Filter nach Jahr
 - Prüfung, dass die Gewinne eines Abends zusammen 0 € ergeben
 - Import bestehender Ergebnisse aus CSV, automatischer Excel-Export nach jeder Änderung

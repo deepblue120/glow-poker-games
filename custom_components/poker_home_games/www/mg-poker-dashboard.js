@@ -14,7 +14,7 @@
  *   # ich_titel: Meine Spiele
  */
 (() => {
-  const VERSION = "1.5.0";
+  const VERSION = "1.6.0";
   const TAG = "mg-poker-dashboard";
 
   const DEFAULTS = {
@@ -53,6 +53,25 @@
     if (s === "" || s === "-" || s === "+") return null;
     const n = Number(s);
     return Number.isFinite(n) ? n : NaN;
+  };
+  const ueberMitternacht = (b, e) => !!(b && e && e <= b);
+  const zeitText = (b, e, uhr = false) => (b && e ? `${b}–${e}${uhr ? " Uhr" : ""}${ueberMitternacht(b, e) ? " +1" : ""}` : "");
+  const WT = ["So.", "Mo.", "Di.", "Mi.", "Do.", "Fr.", "Sa."];
+  const mitternachtHinweis = (datum, b, e) => {
+    if (!b || !e) return "";
+    const [bh, bm] = b.split(":").map(Number), [eh, em] = e.split(":").map(Number);
+    let min = eh * 60 + em - (bh * 60 + bm);
+    const folgetag = min <= 0;
+    if (folgetag) min += 1440;
+    const dauer = (min / 60).toLocaleString("de-DE", { maximumFractionDigits: 1 }) + " h";
+    if (!folgetag) return `Dauer ${dauer}`;
+    let ende = "";
+    if (datum) {
+      const d = new Date(datum + "T12:00:00");
+      d.setDate(d.getDate() + 1);
+      ende = ` (${WT[d.getDay()]} ${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()})`;
+    }
+    return `<b>Ende am Folgetag${ende}</b> · Dauer ${dauer}`;
   };
   const heute = () => {
     const d = new Date();
@@ -207,6 +226,21 @@
 
     .f2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
     .hr { display:inline-flex; gap:14px; align-items:baseline; }
+    .hint { font-size:12.5px; color:${C.muted}; margin-top:6px; min-height:16px; }
+    .hint b { color:${C.gold}; font-weight:600; }
+    .segs { display:inline-flex; gap:4px; align-items:center; flex-wrap:wrap; justify-content:flex-end; text-transform:none; letter-spacing:0; }
+    .sg { font:inherit; font-size:12px; font-weight:600; cursor:pointer; color:${C.muted}; background:none; border:1px solid transparent; border-radius:9px; padding:4px 9px; }
+    .sg.an { color:${C.gold}; border-color:${C.gold}88; background:${C.gold}14; }
+    .sg:focus-visible, .ortwahl:focus-visible { outline:2px solid ${C.gold}; outline-offset:2px; }
+    .ortwahl { font:inherit; font-size:12px; color:${C.text}; background:${C.tile}; border:1px solid ${C.tileBorder}; border-radius:9px; padding:3px 8px; max-width:150px; color-scheme:dark; }
+    .ergl { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:4px 14px; }
+    .el { display:flex; justify-content:space-between; gap:8px; font-size:13.5px; padding:4px 8px; border-radius:8px; }
+    .el .en { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .el .ew { font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .el.sieg { background:${C.gold}14; box-shadow:inset 0 0 0 1px ${C.gold}55; }
+    .el.sieg .en::after { content:" ♛"; color:${C.gold}; font-size:11px; }
+    .lmeta { font-size:12.5px; color:${C.muted}; margin-top:10px; }
+    .lmeta b { color:${C.text}; font-weight:600; }
     textarea { font:inherit; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:12px; color:${C.text}; background:${C.tile};
       border:1px solid ${C.tileBorder}; border-radius:12px; padding:10px 12px; width:100%; resize:vertical; white-space:pre; overflow:auto; color-scheme:dark; }
     textarea:focus { border-color:${C.gold}88; outline:none; }
@@ -258,15 +292,19 @@
       .seite-uebersicht .fillbody { flex:1; overflow:auto; }
       .seite-uebersicht .chartbox { height:auto; overflow:hidden; }
       .seite-uebersicht .paar { gap:14px; }
-      .seite-uebersicht .row { padding:7px 0; }
+      .seite-uebersicht .row { padding:6px 0; }
+      .seite-uebersicht .rn, .seite-uebersicht .rg { font-size:14px; }
       .seite-uebersicht .bar { margin-top:5px; }
       .seite-uebersicht .rs { margin-top:4px; font-size:11.5px; }
-      .seite-uebersicht .platz { padding:10px 8px; border-radius:18px; }
-      .seite-uebersicht .platz.p1 { padding-top:12px; padding-bottom:14px; }
-      .seite-uebersicht .platz .av { width:38px; height:38px; font-size:15px; margin-bottom:6px; }
-      .seite-uebersicht .platz.p1 .av { width:46px; height:46px; font-size:18px; }
-      .seite-uebersicht .platz .nr { font-size:44px; }
-      .seite-uebersicht .krone { font-size:15px; margin-bottom:2px; }
+      .seite-uebersicht .podium { align-items:stretch; gap:10px; }
+      .seite-uebersicht .platz, .seite-uebersicht .platz.p1 { display:grid; grid-template-columns:auto minmax(0,1fr); grid-template-rows:auto auto;
+        column-gap:10px; align-items:center; text-align:left; padding:8px 12px; border-radius:16px; }
+      .seite-uebersicht .platz .av, .seite-uebersicht .platz.p1 .av { grid-row:1 / 3; width:34px; height:34px; font-size:14px; margin:0; }
+      .seite-uebersicht .platz.p1 .av { box-shadow:0 0 14px ${C.gold}88; }
+      .seite-uebersicht .platz .n, .seite-uebersicht .platz.p1 .n { font-size:14px; }
+      .seite-uebersicht .platz .g, .seite-uebersicht .platz.p1 .g { font-size:14px; margin:0; }
+      .seite-uebersicht .platz .s, .seite-uebersicht .krone { display:none; }
+      .seite-uebersicht .platz .nr { font-size:34px; top:0; right:8px; }
       .seite-uebersicht .meta { margin-top:10px; }
       .seite-uebersicht .meta .tile, .seite-uebersicht .rekorde .tile { padding:8px 10px; }
       .seite-uebersicht .meta .tv, .seite-uebersicht .rekorde .tv { font-size:16px; }
@@ -277,11 +315,7 @@
 
     /* niedrige Fenster (Laptop): weiter verdichten */
     @media (min-width: 1100px) and (min-height: 640px) and (max-height: 820px) {
-      .seite-uebersicht .rs, .seite-uebersicht .platz .s, .seite-uebersicht .krone, .seite-uebersicht .platz .nr { display:none; }
-      .seite-uebersicht .platz, .seite-uebersicht .platz.p1 { padding:8px 6px; }
-      .seite-uebersicht .platz .av, .seite-uebersicht .platz.p1 .av { width:30px; height:30px; font-size:13px; margin:0 auto 4px; }
-      .seite-uebersicht .platz .n, .seite-uebersicht .platz.p1 .n { font-size:14px; }
-      .seite-uebersicht .platz .g, .seite-uebersicht .platz.p1 .g { font-size:14px; margin:0; }
+      .seite-uebersicht .rs { display:none; }
       .seite-uebersicht .row { padding:6px 0; }
       .seite-uebersicht .meta .ts { display:none; }
     }
@@ -341,6 +375,8 @@
       this._ichArt = "alle";
       this._ichJahr = "alle";
       this._ichBlinds = "alle";
+      this._podiumModus = "gesamt";
+      this._podiumOrt = null;
       this._sform = null;
       this._entityId = null;
     }
@@ -393,6 +429,7 @@
         verlauf: a.verlauf || [],
         spieler: a.spieler_liste || [],
         orte: a.orte || [],
+        nachOrt: a.nach_ort || {},
       };
     }
 
@@ -443,6 +480,11 @@
       if (this._seite === "spiele") this._bindeSpiele();
       else if (this._seite === "ich") this._bindeIch();
       else this._beobachteChart((w, h) => this._chart(d, w, h));
+      this._root.querySelectorAll("[data-podium]").forEach((b) => b.addEventListener("click", () => {
+        this._podiumModus = b.dataset.podium; this._renderMain();
+      }));
+      const ow = this._root.querySelector("#podium-ort");
+      if (ow) ow.addEventListener("change", () => { this._podiumOrt = ow.value; this._renderMain(); });
       const del = this._root.querySelector("#loeschen");
       if (del) del.addEventListener("click", () => this._loescheLetzten());
       const bea = this._root.querySelector("#bearbeiten");
@@ -543,7 +585,7 @@
         thS(`p:${id}:${f}`, l, i === 0 ? "grp" : "")).join("")).join("")}</tr>`;
 
       const body = zeilen.map((z) => {
-        const zeit = z.t.beginn && z.t.ende ? `${z.t.beginn}–${z.t.ende}` : "";
+        const zeit = zeitText(z.t.beginn, z.t.ende);
         const info = [z.t.ort, z.t.bezeichnung, z.t.blinds, zeit].filter(Boolean).join(" · ");
         const zellen = spieler.map(([id]) => {
           const e = z.m[id];
@@ -793,7 +835,7 @@
       const blindsDa = [...new Set(alle.map((x) => x.blinds).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de", { numeric: true }));
       const zeilen = liste.map((x) => {
         const a = ARTEN[x.art];
-        const zeit = x.beginn && x.ende ? `${x.beginn}–${x.ende}` : "";
+        const zeit = zeitText(x.beginn, x.ende);
         const ph = x.dauer ? x.gewinn / x.dauer : null;
         return `<tr>
           <td>${datumDe(x.datum)}${zeit ? `<span class="klein">${zeit}</span>` : ""}</td>
@@ -947,6 +989,7 @@
               <label class="fl">Beginn<input type="time" id="s-beginn" value="${f.beginn}"></label>
               <label class="fl">Ende<input type="time" id="s-ende" value="${f.ende}"></label>
             </div>
+            <div class="hint" id="s-mn">${mitternachtHinweis(f.datum, f.beginn, f.ende)}</div>
             <div class="sec"><span>Art</span></div>
             <div class="chips">${artChips}</div>
             <div class="chips" style="margin-top:8px">${spChips}</div>
@@ -975,7 +1018,7 @@
       $("#ov").addEventListener("click", (ev) => { if (ev.target.id === "ov" && !f.busy) schliessen(); });
       $("#abbr").addEventListener("click", schliessen);
       [["#s-datum", "datum"], ["#s-beginn", "beginn"], ["#s-ende", "ende"], ["#s-ort", "ort"], ["#s-blinds", "blinds"], ["#s-notiz", "notiz"]].forEach(([q, k]) =>
-        $(q).addEventListener("input", (ev) => { f[k] = ev.target.value; this._sessionInfo(); }));
+        $(q).addEventListener("input", (ev) => { f[k] = ev.target.value; this._sessionInfo(); $("#s-mn").innerHTML = mitternachtHinweis(f.datum, f.beginn, f.ende); }));
       $("#s-einsatz").addEventListener("input", (ev) => { f.einsatz = ev.target.value; this._sessionInfo(); });
       $("#s-gewinn").addEventListener("input", (ev) => { f.gewinn = ev.target.value; this._sessionInfo(); });
       $("#s-pm").addEventListener("click", () => {
@@ -1103,21 +1146,48 @@
     }
 
     _podium(d) {
-      if (!d.rangliste.length) return `<div class="h">Podium</div><div class="leer">Noch keine Ergebnisse.</div>`;
+      const orte = Object.keys(d.nachOrt || {}).sort((a, b) => a.localeCompare(b, "de"));
+      let modus = this._podiumModus;
+      if (modus === "ort" && !orte.length) modus = "gesamt";
+      const ort = modus === "ort" ? (orte.includes(this._podiumOrt) ? this._podiumOrt : orte[0]) : null;
+      const MIN = 5;
+      let liste = [], wert, info;
+      if (modus === "gesamt") {
+        liste = d.rangliste.slice();
+        wert = (x) => eur(x.gewinn);
+        info = (x) => `${x.spiele} Spiele<span class="roi"> · ROI ${zahl(x.roi, 1)} %</span>`;
+      } else if (modus === "schnitt") {
+        liste = d.rangliste.filter((x) => x.spiele >= MIN).sort((a, b) => b.gewinn_avg - a.gewinn_avg);
+        wert = (x) => eur(x.gewinn_avg);
+        info = (x) => `pro Spiel · ${x.spiele} Spiele`;
+      } else {
+        liste = (d.nachOrt[ort] || []).slice();
+        wert = (x) => eur(x.gewinn);
+        info = (x) => `${x.spiele} ${x.spiele === 1 ? "Spiel" : "Spiele"} hier`;
+      }
       const farbe = [C.gold, "#cfd6e0", "#d08a55"];
+      const zahlwert = (x) => (modus === "schnitt" ? x.gewinn_avg : x.gewinn);
       const platz = (i) => {
-        const x = d.rangliste[i];
+        const x = liste[i];
         if (!x) return "<div></div>";
         return `<div class="platz p${i + 1}">
           <div class="nr" style="color:${farbe[i]}">${i + 1}</div>
           ${i === 0 ? '<div class="krone">♛</div>' : ""}
           <div class="av" style="background:${farbe[i]}">${esc(x.name.slice(0, 1).toUpperCase())}</div>
           <div class="n">${esc(x.name)}</div>
-          <div class="g" style="color:${vz(x.gewinn)}">${eur(x.gewinn)}</div>
-          <div class="s">${x.spiele} Spiele<span class="roi"> · ROI ${zahl(x.roi, 1)} %</span></div>
+          <div class="g" style="color:${vz(zahlwert(x))}">${wert(x)}</div>
+          <div class="s">${info(x)}</div>
         </div>`;
       };
-      return `<div class="h">Podium</div><div class="podium">${platz(1)}${platz(0)}${platz(2)}</div>`;
+      const seg = (k, l) => `<button class="sg ${modus === k ? "an" : ""}" data-podium="${k}" aria-pressed="${modus === k}">${l}</button>`;
+      const ortWahl = modus === "ort"
+        ? `<select class="ortwahl" id="podium-ort" aria-label="Spielort">${orte.map((o) => `<option value="${esc(o)}" ${o === ort ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`
+        : "";
+      const kopf = `<div class="h">Podium <span class="segs">${seg("gesamt", "Gesamt")}${seg("schnitt", "Ø pro Spiel")}${orte.length ? seg("ort", "Nach Ort") : ""}${ortWahl}</span></div>`;
+      if (!liste.length) {
+        return `${kopf}<div class="leer">${modus === "schnitt" ? `Noch niemand mit mindestens ${MIN} Spielen.` : "Noch keine Ergebnisse."}</div>`;
+      }
+      return `${kopf}<div class="podium">${platz(1)}${platz(0)}${platz(2)}</div>`;
     }
 
     _tabelle(d) {
@@ -1142,20 +1212,15 @@
     _letzter(d) {
       const l = d.letzter;
       if (!l) return `<div class="h">Letzter Spieltag</div><div class="leer">Noch kein Spieltag gespeichert.</div>`;
-      const zeit = l.beginn && l.ende ? `${l.beginn}–${l.ende} Uhr` : "";
-      const kopf = [datumDe(l.datum), zeit, l.ort, l.bezeichnung].filter(Boolean).join(" · ");
-      const chips = l.ergebnisse.map((e) => {
-        const c = vz(e.gewinn);
-        return `<div class="erg" style="background:${c}18;border:1px solid ${c}55;color:${c}">${esc(e.name)} <span>${eur(e.gewinn)}</span></div>`;
-      }).join("");
-      const sieger = l.ergebnisse[0];
+      const zeit = zeitText(l.beginn, l.ende, true);
+      const kopf = [datumDe(l.datum), l.ort, l.bezeichnung].filter(Boolean).join(" · ");
+      const maxG = Math.max(...l.ergebnisse.map((e) => e.gewinn));
+      const zeilen = l.ergebnisse.map((e) => `<div class="el ${e.gewinn === maxG && maxG > 0 ? "sieg" : ""}">
+          <span class="en">${esc(e.name)}</span><span class="ew" style="color:${vz(e.gewinn)}">${eur(e.gewinn)}</span></div>`).join("");
+      const meta = [`Topf <b>${zahl(l.topf, 0)} €</b>`, `${l.ergebnisse.length} Spieler`, l.dauer_h ? `<b>${zahl(l.dauer_h, 1)} h</b>${zeit ? ` (${zeit})` : ""}` : "", l.blinds ? `Blinds ${esc(l.blinds)}` : ""].filter(Boolean).join(" · ");
       return `<div class="h">Letzter Spieltag <small>${esc(kopf)}</small></div>
-        <div class="chips">${chips}</div>
-        <div class="meta">
-          ${this._tile("Im Topf", zahl(l.topf, 0) + " €", `${l.ergebnisse.length} Spieler`)}
-          ${this._tile("Dauer", l.dauer_h ? zahl(l.dauer_h, 1) + " h" : "–", zeit || "keine Uhrzeit")}
-          ${this._tile("Abendsieger", sieger ? esc(sieger.name) : "–", sieger ? eur(sieger.gewinn) : "")}
-        </div>
+        <div class="ergl">${zeilen}</div>
+        <div class="lmeta">${meta}</div>
         <div class="aktionen"><button class="link edit" id="bearbeiten">Bearbeiten</button><button class="link" id="loeschen">Löschen</button></div>`;
     }
 
@@ -1283,6 +1348,7 @@
               <label class="fl">Beginn<input type="time" id="f-beginn" value="${f.beginn}"></label>
               <label class="fl">Ende<input type="time" id="f-ende" value="${f.ende}"></label>
             </div>
+            <div class="hint" id="f-mn">${mitternachtHinweis(f.datum, f.beginn, f.ende)}</div>
             <div class="f3">
               <label class="fl">Ort (optional)<input id="f-ort" list="orte-liste" value="${esc(f.ort)}" placeholder="z. B. Bei Marco" autocomplete="off"></label>
               <label class="fl">Blinds (optional)<input id="f-blinds" value="${esc(f.blinds)}" placeholder="z. B. 0,10/0,20" autocomplete="off"></label>
@@ -1309,6 +1375,9 @@
       $("#f-datum").addEventListener("input", (ev) => (f.datum = ev.target.value));
       $("#f-beginn").addEventListener("input", (ev) => (f.beginn = ev.target.value));
       $("#f-ende").addEventListener("input", (ev) => (f.ende = ev.target.value));
+      ["#f-datum", "#f-beginn", "#f-ende"].forEach((q) => $(q).addEventListener("input", () => {
+        $("#f-mn").innerHTML = mitternachtHinweis(f.datum, f.beginn, f.ende);
+      }));
       $("#f-bez").addEventListener("input", (ev) => (f.bez = ev.target.value));
       $("#f-ort").addEventListener("input", (ev) => (f.ort = ev.target.value));
       $("#f-blinds").addEventListener("input", (ev) => (f.blinds = ev.target.value));
