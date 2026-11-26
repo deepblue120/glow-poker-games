@@ -4,6 +4,7 @@ Home-Assistant-Integration für die Ergebnisse von Poker-Home-Games – mit eige
 
 - Spieltage mit Datum, Beginn, Ende, Ort, Bezeichnung und Ergebnissen pro Spieler erfassen
 - Jeden Spieltag nachträglich bearbeiten oder löschen
+- Dritte Seite „Meine Spiele“: eigene Bilanz aus der Runde (automatisch) plus eigene Sessions im Casino, bei anderen Home Games oder online – mit Blinds, Ort, Zeit, Bilanz nach Spielart, Verlauf, Rekorden und Liste
 - Ewige Tabelle mit Gewinn, Ø pro Spieltag, ROI, Gewinnquote und Gewinn pro Stunde
 - Podium, letzter Spieltag, Verlaufsgraph und Rekorde in einer Panel-Karte
 - Übersicht passt im Browser komplett auf einen Bildschirm (ideal für Screenshots)
@@ -49,6 +50,8 @@ type: custom:mg-poker-dashboard
 # title: Pokerrunde
 # standard_einsatz: 20
 # entity: sensor.poker_home_games_rangliste   # wird sonst automatisch gefunden
+# ich: Marco                # blendet die Seite „Meine Spiele“ für diesen Spieler ein
+# ich_titel: Meine Spiele
 ```
 
 Oben rechts wechselt der Umschalter zwischen **Übersicht** und **Alle Spiele**.
@@ -76,6 +79,7 @@ data:
 - **Aktion** `poker_home_games.spieltag_bearbeiten` – wie `spieltag_eintragen`, zusätzlich mit `id`; ersetzt den Spieltag komplett
 - **Aktion** `poker_home_games.spieltag_loeschen` – löscht den Spieltag mit der angegebenen `id`
 - **Aktion** `poker_home_games.letzten_spieltag_loeschen`
+- **Aktionen** `poker_home_games.session_eintragen`, `session_bearbeiten`, `session_loeschen`, `sessions_abrufen` für eigene Sessions außerhalb der Runde (Felder: `datum`, `beginn`, `ende`, `art` = casino/home_game/online/sonstiges, `spielart` = cash/turnier, `blinds`, `ort`, `einsatz`, `gewinn`, `notiz`)
 - **Aktion** `poker_home_games.spieltage_abrufen` liefert alle Spieltage mit Einzelergebnissen als Antwort (nutzt die Karte für „Alle Spiele“)
 
 ## Entitäten
@@ -90,4 +94,4 @@ Nach jedem Speichern wird das Event `poker_home_games_spieltag_gespeichert` ausg
 ## Daten
 
 - Datenbestand: `/config/.storage/poker_home_games.<entry_id>` (Teil des normalen HA-Backups)
-- Excel-Export: `/config/poker_spieltage.csv` (Semikolon, Dezimalkomma), wird nach jeder Änderung neu geschrieben
+- Excel-Export: `/config/poker_spieltage.csv` und `/config/poker_eigene_sessions.csv` (Semikolon, Dezimalkomma), werden nach jeder Änderung neu geschrieben

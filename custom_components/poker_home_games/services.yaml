@@ -16,6 +16,9 @@ spieltag_eintragen:
     ort:
       selector:
         text:
+    blinds:
+      selector:
+        text:
     ergebnisse:
       required: true
       example: '[{"spieler": "Christian", "einsatz": 40, "gewinn": 25.5}, {"spieler": "Jan", "einsatz": 40, "gewinn": -25.5}]'
@@ -52,6 +55,9 @@ spieltag_bearbeiten:
     ort:
       selector:
         text:
+    blinds:
+      selector:
+        text:
     ergebnisse:
       required: true
       selector:
@@ -67,3 +73,122 @@ spieltag_loeschen:
       required: true
       selector:
         text:
+
+session_eintragen:
+  fields:
+    datum:
+      required: true
+      selector:
+        date:
+    beginn:
+      selector:
+        time:
+    ende:
+      selector:
+        time:
+    art:
+      default: casino
+      selector:
+        select:
+          options: [casino, home_game, online, sonstiges]
+          translation_key: art
+    spielart:
+      default: cash
+      selector:
+        select:
+          options: [cash, turnier]
+          translation_key: spielart
+    blinds:
+      example: "1/2"
+      selector:
+        text:
+    ort:
+      selector:
+        text:
+    einsatz:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 0.01
+          mode: box
+          unit_of_measurement: "€"
+    gewinn:
+      required: true
+      selector:
+        number:
+          min: -100000
+          max: 100000
+          step: 0.01
+          mode: box
+          unit_of_measurement: "€"
+    notiz:
+      selector:
+        text:
+
+session_bearbeiten:
+  fields:
+    id:
+      required: true
+      selector:
+        text:
+    datum:
+      required: true
+      selector:
+        date:
+    beginn:
+      selector:
+        time:
+    ende:
+      selector:
+        time:
+    art:
+      default: casino
+      selector:
+        select:
+          options: [casino, home_game, online, sonstiges]
+          translation_key: art
+    spielart:
+      default: cash
+      selector:
+        select:
+          options: [cash, turnier]
+          translation_key: spielart
+    blinds:
+      example: "1/2"
+      selector:
+        text:
+    ort:
+      selector:
+        text:
+    einsatz:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 100000
+          step: 0.01
+          mode: box
+          unit_of_measurement: "€"
+    gewinn:
+      required: true
+      selector:
+        number:
+          min: -100000
+          max: 100000
+          step: 0.01
+          mode: box
+          unit_of_measurement: "€"
+    notiz:
+      selector:
+        text:
+
+session_loeschen:
+  fields:
+    id:
+      required: true
+      selector:
+        text:
+
+sessions_abrufen:

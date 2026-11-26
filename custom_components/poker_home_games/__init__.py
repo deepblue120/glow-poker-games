@@ -27,6 +27,12 @@ from .const import (
     CONF_SPIELER,
     DOMAIN,
     SERVICE_LETZTEN_LOESCHEN,
+    SERVICE_SESSION_BEARBEITEN,
+    SERVICE_SESSION_EINTRAGEN,
+    SERVICE_SESSION_LOESCHEN,
+    SERVICE_SESSIONS_ABRUFEN,
+    SESSION_ARTEN,
+    SPIELARTEN,
     SERVICE_SPIELTAG_BEARBEITEN,
     SERVICE_SPIELTAG_EINTRAGEN,
     SERVICE_SPIELTAG_LOESCHEN,
@@ -36,7 +42,7 @@ from .data import PokerData, fmt_eur
 
 KARTE_URL = "/poker_home_games/mg-poker-dashboard.js"
 KARTE_DATEI = Path(__file__).parent / "www" / "mg-poker-dashboard.js"
-KARTE_VERSION = "1.5.0"
+KARTE_VERSION = "1.6.0"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -52,6 +58,7 @@ SPIELTAG_SCHEMA = vol.Schema(
         vol.Optional("ende"): cv.time,
         vol.Optional("bezeichnung", default=""): cv.string,
         vol.Optional("ort", default=""): cv.string,
+        vol.Optional("blinds", default=""): cv.string,
         vol.Required("ergebnisse"): vol.All(
             cv.ensure_list,
             [
@@ -71,6 +78,27 @@ SPIELTAG_SCHEMA = vol.Schema(
 )
 BEARBEITEN_SCHEMA = SPIELTAG_SCHEMA.extend({vol.Required("id"): cv.string})
 LOESCHEN_SCHEMA = vol.Schema({vol.Required("id"): cv.string})
+
+SESSION_SCHEMA = vol.Schema(
+    {
+        vol.Required("datum"): cv.date,
+        vol.Optional("beginn"): cv.time,
+        vol.Optional("ende"): cv.time,
+        vol.Optional("art", default="casino"): vol.In(SESSION_ARTEN),
+        vol.Optional("spielart", default="cash"): vol.In(SPIELARTEN),
+        vol.Optional("blinds", default=""): cv.string,
+        vol.Optional("ort", default=""): cv.string,
+        vol.Required("einsatz"): vol.All(vol.Coerce(float), vol.Range(min=0)),
+        vol.Required("gewinn"): vol.Coerce(float),
+        vol.Optional("notiz", default=""): cv.string,
+    }
+)
+SESSION_BEARBEITEN_SCHEMA = SESSION_SCHEMA.extend({vol.Required("id"): cv.string})
+
+
+def _pruefe_session(daten: dict) -> None:
+    if daten["gewinn"] < -daten["einsatz"]:
+        raise ServiceValidationError("Verlust größer als Einsatz")
 
 
 def _pruefe_ergebnisse(
@@ -118,6 +146,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         info = await data.async_spieltag_speichern(
             call.data["datum"], call.data.get("beginn"), call.data.get("ende"),
             call.data["bezeichnung"], ergebnisse, call.data["ort"],
+            call.data["blinds"],
         )
         return info if call.return_response else None
 
@@ -128,7 +157,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             info = await data.async_spieltag_aendern(
                 call.data["id"], call.data["datum"], call.data.get("beginn"),
                 call.data.get("ende"), call.data["bezeichnung"], ergebnisse,
-                call.data["ort"],
+                call.data["ort"], call.data["blinds"],
             )
         except KeyError as err:
             raise ServiceValidationError("Spieltag nicht gefunden") from err
@@ -140,6 +169,42 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         except KeyError as err:
             raise ServiceValidationError("Spieltag nicht gefunden") from err
         return info if call.return_response else None
+
+    async def session_eintragen(call: ServiceCall) -> ServiceResponse:
+        _pruefe_session(call.data)
+        info = await _poker_data(hass).async_session_speichern(dict(call.data))
+        return info if call.return_response else None
+
+    async def session_bearbeiten(call: ServiceCall) -> ServiceResponse:
+        _pruefe_session(call.data)
+        try:
+            info = await _poker_data(hass).async_session_aendern(
+                call.data["id"], dict(call.data)
+            )
+        except KeyError as err:
+            raise ServiceValidationError("Session nicht gefunden") from err
+        return info if call.return_response else None
+
+    async def session_loeschen(call: ServiceCall) -> ServiceResponse:
+        try:
+            info = await _poker_data(hass).async_session_loeschen(call.data["id"])
+        except KeyError as err:
+            raise ServiceValidationError("Session nicht gefunden") from err
+        return info if call.return_response else None
+
+    async def sessions_abrufen(call: ServiceCall) -> ServiceResponse:
+        data = _poker_data(hass)
+        return {"sessions": [data.session_info(x) for x in data.sessions_sortiert()]}
+
+    for name, handler, schema, antwort in (
+        (SERVICE_SESSION_EINTRAGEN, session_eintragen, SESSION_SCHEMA, SupportsResponse.OPTIONAL),
+        (SERVICE_SESSION_BEARBEITEN, session_bearbeiten, SESSION_BEARBEITEN_SCHEMA, SupportsResponse.OPTIONAL),
+        (SERVICE_SESSION_LOESCHEN, session_loeschen, LOESCHEN_SCHEMA, SupportsResponse.OPTIONAL),
+        (SERVICE_SESSIONS_ABRUFEN, sessions_abrufen, None, SupportsResponse.ONLY),
+    ):
+        hass.services.async_register(
+            DOMAIN, name, handler, schema=schema, supports_response=antwort
+        )
 
     async def letzten_loeschen(call: ServiceCall) -> ServiceResponse:
         info = await _poker_data(hass).async_letzten_loeschen()

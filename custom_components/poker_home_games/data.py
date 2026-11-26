@@ -11,10 +11,11 @@ import uuid
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.storage import Store
-from homeassistant.util import slugify
+from homeassistant.util import dt as dt_util, slugify
 
 from .const import (
     CSV_EXPORT,
+    CSV_EXPORT_SESSIONS,
     DOMAIN,
     EVENT_SPIELTAG_GEAENDERT,
     EVENT_SPIELTAG_GESPEICHERT,
@@ -55,26 +56,31 @@ class PokerData:
         )
         self.spieler: dict[str, dict[str, Any]] = {}
         self.spieltage: list[dict[str, Any]] = []
+        self.sessions: list[dict[str, Any]] = []
         self._statistik: dict[str, Any] | None = None
+        self._stand: str = dt_util.utcnow().isoformat()
 
     # ------------------------------------------------------------ Speicher
     async def async_load(self) -> None:
         daten = await self._store.async_load() or {}
         self.spieler = daten.get("spieler", {})
         self.spieltage = daten.get("spieltage", [])
+        self.sessions = daten.get("sessions", [])
         self._statistik = None
 
     async def async_save(self) -> None:
         self._statistik = None
+        self._stand = dt_util.utcnow().isoformat()
         await self._store.async_save(
-            {"spieler": self.spieler, "spieltage": self.spieltage}
+            {"spieler": self.spieler, "spieltage": self.spieltage,
+             "sessions": self.sessions}
         )
-        snapshot = (copy.deepcopy(self.spieler), self.sortiert())
+        snapshot = (copy.deepcopy(self.spieler), self.sortiert(), self.sessions_sortiert())
         await self.hass.async_add_executor_job(self._schreibe_csv, *snapshot)
         async_dispatcher_send(self.hass, SIGNAL_UPDATE)
 
-    def _schreibe_csv(self, spieler: dict, spieltage: list) -> None:
-        """Excel-taugliche Kopie aller Spieltage (Semikolon, Dezimalkomma)."""
+    def _schreibe_csv(self, spieler: dict, spieltage: list, sessions: list) -> None:
+        """Excel-taugliche Kopie aller Spieltage und Sessions (Semikolon, Dezimalkomma)."""
 
         def zahl(wert: float | None) -> str:
             return "" if wert is None else f"{wert:.2f}".replace(".", ",")
@@ -84,7 +90,7 @@ class PokerData:
         ) as datei:
             writer = csv.writer(datei, delimiter=";")
             writer.writerow(
-                ["Datum", "Beginn", "Ende", "Dauer (h)", "Bezeichnung", "Ort",
+                ["Datum", "Beginn", "Ende", "Dauer (h)", "Bezeichnung", "Ort", "Blinds",
                  "Spieler", "Einsatz", "Endstand", "Gewinn"]
             )
             for tag in spieltage:
@@ -95,11 +101,28 @@ class PokerData:
                         [
                             tag["datum"], tag.get("beginn") or "", tag.get("ende") or "",
                             zahl(dauer), tag.get("bezeichnung") or "",
-                            tag.get("ort") or "", name,
+                            tag.get("ort") or "", tag.get("blinds") or "", name,
                             zahl(erg["einsatz"]), zahl(erg["einsatz"] + erg["gewinn"]),
                             zahl(erg["gewinn"]),
                         ]
                     )
+        with open(
+            self.hass.config.path(CSV_EXPORT_SESSIONS), "w", encoding="utf-8-sig", newline=""
+        ) as datei:
+            writer = csv.writer(datei, delimiter=";")
+            writer.writerow(
+                ["Datum", "Beginn", "Ende", "Dauer (h)", "Art", "Spielart", "Blinds",
+                 "Ort", "Einsatz", "Endstand", "Gewinn", "Notiz"]
+            )
+            for s in sessions:
+                writer.writerow(
+                    [
+                        s["datum"], s.get("beginn") or "", s.get("ende") or "",
+                        zahl(dauer_stunden(s)), s["art"], s["spielart"], s["blinds"],
+                        s["ort"], zahl(s["einsatz"]), zahl(s["einsatz"] + s["gewinn"]),
+                        zahl(s["gewinn"]), s["notiz"],
+                    ]
+                )
 
     # ------------------------------------------------------------ Spieler
     def spieler_id(self, name_oder_id: str) -> str | None:
@@ -145,11 +168,12 @@ class PokerData:
         bezeichnung: str,
         ergebnisse: list[tuple[str, float, float]],
         ort: str = "",
+        blinds: str = "",
     ) -> dict[str, Any]:
         """Spieltag anlegen, speichern und Event auslösen."""
         spieltag = {"id": uuid.uuid4().hex}
         spieltag.update(
-            self._felder(datum, beginn, ende, bezeichnung, ort, ergebnisse)
+            self._felder(datum, beginn, ende, bezeichnung, ort, ergebnisse, blinds)
         )
         self.spieltage.append(spieltag)
         await self.async_save()
@@ -165,8 +189,10 @@ class PokerData:
         bezeichnung: str,
         ort: str,
         ergebnisse: list[tuple[str, float, float]],
+        blinds: str = "",
     ) -> dict[str, Any]:
         return {
+            "blinds": (blinds or "").strip(),
             "datum": datum.isoformat(),
             "beginn": beginn.strftime("%H:%M") if beginn else None,
             "ende": ende.strftime("%H:%M") if ende else None,
@@ -193,10 +219,13 @@ class PokerData:
         bezeichnung: str,
         ergebnisse: list[tuple[str, float, float]],
         ort: str = "",
+        blinds: str = "",
     ) -> dict[str, Any]:
         """Vorhandenen Spieltag komplett ersetzen (ID bleibt)."""
         tag = self._finde(spieltag_id)
-        tag.update(self._felder(datum, beginn, ende, bezeichnung, ort, ergebnisse))
+        tag.update(
+            self._felder(datum, beginn, ende, bezeichnung, ort, ergebnisse, blinds)
+        )
         await self.async_save()
         info = self.spieltag_info(tag)
         self.hass.bus.async_fire(EVENT_SPIELTAG_GEAENDERT, info)
@@ -243,6 +272,7 @@ class PokerData:
             "dauer_h": dauer_stunden(tag),
             "bezeichnung": tag.get("bezeichnung") or "",
             "ort": tag.get("ort") or "",
+            "blinds": tag.get("blinds") or "",
             "topf": _r(sum(e["einsatz"] for e in tag["ergebnisse"])),
             "ergebnisse": ergebnisse,
         }
@@ -321,12 +351,66 @@ class PokerData:
             "letzter_spieltag": self.spieltag_info(tage[-1]) if tage else None,
             "verlauf": verlauf,
             "orte": self._orte(tage),
+            "aktualisiert": self._stand,
+            "anzahl_sessions": len(self.sessions),
             "spieler_liste": [
                 {"id": pid, "name": sp["name"], "aktiv": sp.get("aktiv", True)}
                 for pid, sp in sorted(self.spieler.items(), key=lambda x: x[1]["name"])
             ],
         }
         return self._statistik
+
+    # ------------------------------------------------------------ Eigene Sessions
+    def sessions_sortiert(self) -> list[dict[str, Any]]:
+        return sorted(
+            copy.deepcopy(self.sessions),
+            key=lambda s: (s["datum"], s.get("beginn") or ""),
+        )
+
+    @staticmethod
+    def _session_felder(daten: dict[str, Any]) -> dict[str, Any]:
+        beginn, ende = daten.get("beginn"), daten.get("ende")
+        return {
+            "datum": daten["datum"].isoformat(),
+            "beginn": beginn.strftime("%H:%M") if beginn else None,
+            "ende": ende.strftime("%H:%M") if ende else None,
+            "art": daten.get("art") or "casino",
+            "spielart": daten.get("spielart") or "cash",
+            "blinds": (daten.get("blinds") or "").strip(),
+            "ort": (daten.get("ort") or "").strip(),
+            "einsatz": _r(daten["einsatz"]),
+            "gewinn": _r(daten["gewinn"]),
+            "notiz": (daten.get("notiz") or "").strip(),
+        }
+
+    def session_info(self, s: dict[str, Any]) -> dict[str, Any]:
+        return {**s, "endstand": _r(s["einsatz"] + s["gewinn"]), "dauer_h": dauer_stunden(s)}
+
+    def _finde_session(self, session_id: str) -> dict[str, Any]:
+        for s in self.sessions:
+            if s["id"] == session_id:
+                return s
+        raise KeyError(session_id)
+
+    async def async_session_speichern(self, daten: dict[str, Any]) -> dict[str, Any]:
+        session = {"id": uuid.uuid4().hex, **self._session_felder(daten)}
+        self.sessions.append(session)
+        await self.async_save()
+        return self.session_info(session)
+
+    async def async_session_aendern(
+        self, session_id: str, daten: dict[str, Any]
+    ) -> dict[str, Any]:
+        session = self._finde_session(session_id)
+        session.update(self._session_felder(daten))
+        await self.async_save()
+        return self.session_info(session)
+
+    async def async_session_loeschen(self, session_id: str) -> dict[str, Any]:
+        session = self._finde_session(session_id)
+        self.sessions = [s for s in self.sessions if s["id"] != session_id]
+        await self.async_save()
+        return self.session_info(session)
 
     @staticmethod
     def _orte(tage: list[dict[str, Any]]) -> list[str]:
@@ -378,6 +462,7 @@ class PokerData:
                             "_key": schluessel, "datum": datum.isoformat(),
                             "bezeichnung": bez,
                             "ort": (zeile.get("ort") or "").strip(),
+                            "blinds": (zeile.get("blinds") or "").strip(),
                             "beginn": (zeile.get("beginn") or "").strip()[:5] or None,
                             "ende": (zeile.get("ende") or "").strip()[:5] or None,
                             "ergebnisse": [],
@@ -405,6 +490,7 @@ class PokerData:
                     "id": uuid.uuid4().hex, "datum": tag["datum"],
                     "beginn": tag["beginn"], "ende": tag["ende"],
                     "bezeichnung": tag["bezeichnung"], "ort": tag.get("ort", ""),
+                    "blinds": tag.get("blinds", ""),
                     "ergebnisse": ergebnisse,
                 }
             )

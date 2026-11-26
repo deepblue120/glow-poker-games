@@ -40,7 +40,8 @@
           "ende": "Ende",
           "bezeichnung": "Bezeichnung (optional, z. B. Malle)",
           "spieler": "Spieler",
-          "ort": "Ort (optional)"
+          "ort": "Ort (optional)",
+          "blinds": "Blinds (optional, z. B. 0,10/0,20)"
         }
       },
       "ergebnisse": {
@@ -116,6 +117,10 @@
         "ort": {
           "name": "Ort",
           "description": "Wo gespielt wurde (optional)."
+        },
+        "blinds": {
+          "name": "Blinds",
+          "description": "Gespielte Blinds, z. B. 0,10/0,20 (optional)."
         }
       }
     },
@@ -162,6 +167,10 @@
         "ort": {
           "name": "Ort",
           "description": "Wo gespielt wurde (optional)."
+        },
+        "blinds": {
+          "name": "Blinds",
+          "description": "Gespielte Blinds, z. B. 0,10/0,20 (optional)."
         }
       }
     },
@@ -173,6 +182,132 @@
           "name": "ID",
           "description": "ID des Spieltags (aus spieltage_abrufen)."
         }
+      }
+    },
+    "session_eintragen": {
+      "name": "Eigene Session eintragen",
+      "description": "Speichert eine eigene Session außerhalb der Runde (Casino, andere Home Games, Online).",
+      "fields": {
+        "datum": {
+          "name": "Datum",
+          "description": "Tag der Session."
+        },
+        "beginn": {
+          "name": "Beginn",
+          "description": "Uhrzeit Beginn."
+        },
+        "ende": {
+          "name": "Ende",
+          "description": "Uhrzeit Ende (nach Mitternacht erlaubt)."
+        },
+        "art": {
+          "name": "Art",
+          "description": "Casino, Home Game, Online oder Sonstiges."
+        },
+        "spielart": {
+          "name": "Spielart",
+          "description": "Cash Game oder Turnier."
+        },
+        "blinds": {
+          "name": "Blinds",
+          "description": "z. B. 1/2 oder 0,50/1."
+        },
+        "ort": {
+          "name": "Ort",
+          "description": "Wo gespielt wurde."
+        },
+        "einsatz": {
+          "name": "Einsatz",
+          "description": "Gesamter Buy-in inklusive Rebuys."
+        },
+        "gewinn": {
+          "name": "Gewinn",
+          "description": "Endstand minus Einsatz, Verlust negativ."
+        },
+        "notiz": {
+          "name": "Notiz",
+          "description": "Freitext (optional)."
+        }
+      }
+    },
+    "session_bearbeiten": {
+      "name": "Eigene Session bearbeiten",
+      "description": "Ersetzt eine eigene Session komplett.",
+      "fields": {
+        "id": {
+          "name": "ID",
+          "description": "ID der Session (aus sessions_abrufen)."
+        },
+        "datum": {
+          "name": "Datum",
+          "description": "Tag der Session."
+        },
+        "beginn": {
+          "name": "Beginn",
+          "description": "Uhrzeit Beginn."
+        },
+        "ende": {
+          "name": "Ende",
+          "description": "Uhrzeit Ende (nach Mitternacht erlaubt)."
+        },
+        "art": {
+          "name": "Art",
+          "description": "Casino, Home Game, Online oder Sonstiges."
+        },
+        "spielart": {
+          "name": "Spielart",
+          "description": "Cash Game oder Turnier."
+        },
+        "blinds": {
+          "name": "Blinds",
+          "description": "z. B. 1/2 oder 0,50/1."
+        },
+        "ort": {
+          "name": "Ort",
+          "description": "Wo gespielt wurde."
+        },
+        "einsatz": {
+          "name": "Einsatz",
+          "description": "Gesamter Buy-in inklusive Rebuys."
+        },
+        "gewinn": {
+          "name": "Gewinn",
+          "description": "Endstand minus Einsatz, Verlust negativ."
+        },
+        "notiz": {
+          "name": "Notiz",
+          "description": "Freitext (optional)."
+        }
+      }
+    },
+    "session_loeschen": {
+      "name": "Eigene Session löschen",
+      "description": "Löscht eine eigene Session.",
+      "fields": {
+        "id": {
+          "name": "ID",
+          "description": "ID der Session (aus sessions_abrufen)."
+        }
+      }
+    },
+    "sessions_abrufen": {
+      "name": "Eigene Sessions abrufen",
+      "description": "Liefert alle eigenen Sessions (für die Dashboard-Karte)."
+    }
+  },
+  "selector": {
+    "art": {
+      "options": {
+        "casino": "Casino",
+        "home_game": "Home Game",
+        "online": "Online",
+        "sonstiges": "Sonstiges"
+      }
+    },
+    "spielart": {
+      "options": {
+        "cash": "Cash Game",
+        "turnier": "Turnier"
       }
     }
   }

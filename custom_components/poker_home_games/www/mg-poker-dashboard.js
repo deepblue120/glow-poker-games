@@ -10,15 +10,19 @@
  *   # entity: sensor.poker_home_games_rangliste   (wird sonst automatisch gefunden)
  *   # title: Pokerrunde
  *   # standard_einsatz: 20
+ *   # ich: Marco                  (blendet die Seite „Meine Spiele“ ein)
+ *   # ich_titel: Meine Spiele
  */
 (() => {
-  const VERSION = "1.3.0";
+  const VERSION = "1.4.0";
   const TAG = "mg-poker-dashboard";
 
   const DEFAULTS = {
     entity: null,
     title: "Pokerrunde",
     standard_einsatz: 20,
+    ich: null,
+    ich_titel: "Meine Spiele",
   };
 
   // Farben wie im Glow-Dashboard
@@ -202,6 +206,12 @@
     .mehr { margin-top:14px; text-align:center; }
 
     .f2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+    .f3 { display:grid; grid-template-columns:1.2fr 1fr 1.2fr; gap:10px; margin-top:10px; }
+    .dot { width:10px; height:10px; border-radius:50%; flex:none; }
+    .art { display:inline-block; font-size:12px; font-weight:600; border:1px solid; border-radius:8px; padding:2px 8px; white-space:nowrap; }
+    .rekorde.r3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .grid.ich .chartbox { height:300px; }
+    .tbl tfoot td { border-top:1px solid rgba(255,255,255,0.22); font-weight:700; }
     .btn.rot { color:${C.red}; border-color:${C.red}66; background:${C.red}10; }
     .aktionen { margin-top:12px; display:flex; justify-content:flex-end; gap:16px; }
     .link.edit:hover { color:${C.gold}; }
@@ -234,7 +244,7 @@
     /* Übersicht auf einen Bildschirm (Browser) */
     @media (min-width: 1100px) and (min-height: 640px) {
       .wrap { height:calc(100vh - var(--header-height, 56px)); padding:16px 20px; overflow:hidden; }
-      .wrap:has(.seite-spiele) { height:auto; min-height:calc(100vh - var(--header-height, 56px)); overflow:visible; }
+      .wrap:has(.seite-spiele), .wrap:has(.seite-ich) { height:auto; min-height:calc(100vh - var(--header-height, 56px)); overflow:visible; }
       .inner.seite-uebersicht { height:100%; gap:14px; }
       .seite-uebersicht .grid { flex:1; min-height:0; grid-template-rows:minmax(0,1fr); align-items:stretch; }
       .seite-uebersicht .col { min-height:0; gap:14px; }
@@ -290,7 +300,9 @@
       .platz .roi { display:none; }
       .f4 { grid-template-columns:1fr 1fr; }
       .f4 label:first-child { grid-column:1 / -1; }
-      .f2 { grid-template-columns:1fr; }
+      .f2, .f3 { grid-template-columns:1fr; }
+      .rekorde.r3 { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .grid.ich .chartbox { height:240px; }
       .eing { grid-template-columns:minmax(60px,1fr) 84px 128px; }
       .meta { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .flab { width:100%; }
@@ -319,6 +331,13 @@
       this._listeJahr = "alle";
       this._zeigeEndstand = false;
       this._listeOrt = "alle";
+      this._sessions = null;
+      this._sessionsSig = null;
+      this._ichSort = { key: "datum", ab: true };
+      this._ichArt = "alle";
+      this._ichJahr = "alle";
+      this._ichBlinds = "alle";
+      this._sform = null;
       this._entityId = null;
     }
 
@@ -391,7 +410,8 @@
         return;
       }
       const stand = d.letzter ? `Stand nach dem Spieltag vom ${datumDe(d.letzter.datum)}` : "Noch kein Spieltag gespeichert";
-      const seite = this._seite === "spiele" ? this._seiteSpiele(d) : this._seiteUebersicht(d);
+      if (this._seite === "ich" && !this._config.ich) this._seite = "uebersicht";
+      const seite = this._seite === "spiele" ? this._seiteSpiele(d) : this._seite === "ich" ? this._seiteIch(d) : this._seiteUebersicht(d);
       this._root.className = `inner seite-${this._seite}`;
       this._root.innerHTML = `
         <div class="kopf">
@@ -404,19 +424,21 @@
             <div class="tabs" role="tablist">
               <button class="tab ${this._seite === "uebersicht" ? "an" : ""}" role="tab" aria-selected="${this._seite === "uebersicht"}" data-seite="uebersicht">Übersicht</button>
               <button class="tab ${this._seite === "spiele" ? "an" : ""}" role="tab" aria-selected="${this._seite === "spiele"}" data-seite="spiele">Alle Spiele</button>
+              ${this._config.ich ? `<button class="tab ${this._seite === "ich" ? "an" : ""}" role="tab" aria-selected="${this._seite === "ich"}" data-seite="ich">${esc(this._config.ich_titel)}</button>` : ""}
             </div>
-            <button class="btn gold" id="neu">＋ Spieltag</button>
+            <button class="btn gold" id="neu">${this._seite === "ich" ? "＋ Session" : "＋ Spieltag"}</button>
           </div>
         </div>
         ${seite.body}`;
-      this._root.querySelector("#neu").addEventListener("click", () => this._oeffneForm());
+      this._root.querySelector("#neu").addEventListener("click", () => (this._seite === "ich" ? this._oeffneSession() : this._oeffneForm()));
       this._root.querySelectorAll("[data-seite]").forEach((b) => b.addEventListener("click", () => {
         if (this._seite === b.dataset.seite) return;
         this._seite = b.dataset.seite;
         this._renderMain();
       }));
       if (this._seite === "spiele") this._bindeSpiele();
-      else this._beobachteChart(d);
+      else if (this._seite === "ich") this._bindeIch();
+      else this._beobachteChart((w, h) => this._chart(d, w, h));
       const del = this._root.querySelector("#loeschen");
       if (del) del.addEventListener("click", () => this._loescheLetzten());
       const bea = this._root.querySelector("#bearbeiten");
@@ -446,7 +468,7 @@
       return { stats, body };
     }
 
-    _beobachteChart(d) {
+    _beobachteChart(zeichneFn) {
       const box = this._root.querySelector("#chartbox");
       if (!box) return;
       if (this._ro) this._ro.disconnect();
@@ -455,7 +477,7 @@
         if (w < 50 || h < 50) return;
         if (box._mass === `${w}x${h}|${this._sig}`) return;
         box._mass = `${w}x${h}|${this._sig}`;
-        box.innerHTML = this._chart(d, w, h);
+        box.innerHTML = zeichneFn(w, h);
       };
       this._ro = new ResizeObserver(zeichne);
       this._ro.observe(box);
@@ -518,7 +540,7 @@
 
       const body = zeilen.map((z) => {
         const zeit = z.t.beginn && z.t.ende ? `${z.t.beginn}–${z.t.ende}` : "";
-        const info = [z.t.ort, z.t.bezeichnung, zeit].filter(Boolean).join(" · ");
+        const info = [z.t.ort, z.t.bezeichnung, z.t.blinds, zeit].filter(Boolean).join(" · ");
         const zellen = spieler.map(([id]) => {
           const e = z.m[id];
           if (!e) return felder.map((_, i) => `<td class="${i === 0 ? "grp " : ""}nix">·</td>`).join("");
@@ -624,7 +646,400 @@
       }
       this._spieltageSig = sig;
       this._laedt = false;
-      if (this._seite === "spiele") this._renderMain();
+      if (this._seite !== "uebersicht") this._renderMain();
+    }
+
+    async _ladeSessions() {
+      this._laedtS = true;
+      const sig = this._sig;
+      try {
+        const res = await this._hass.callWS({
+          type: "call_service", domain: "poker_home_games", service: "sessions_abrufen",
+          service_data: {}, return_response: true,
+        });
+        this._sessions = (res && res.response && res.response.sessions) || [];
+        this._ladeFehlerS = "";
+      } catch (err) {
+        this._ladeFehlerS = "Eigene Sessions konnten nicht geladen werden: " + ((err && err.message) || err);
+      }
+      this._sessionsSig = sig;
+      this._laedtS = false;
+      if (this._seite === "ich") this._renderMain();
+    }
+
+    // ------------------------------------------------------------ Meine Spiele
+    _ichId(d) {
+      const ich = String(this._config.ich || "").trim().toLowerCase();
+      if (!ich) return null;
+      const sp = d.spieler.find((s) => s.id === ich || s.name.toLowerCase() === ich);
+      return sp ? sp.id : null;
+    }
+
+    _arten() {
+      return {
+        runde: { label: this._config.title, farbe: C.gold },
+        casino: { label: "Casino", farbe: C.violet },
+        home_game: { label: "Home Game", farbe: C.cyan },
+        online: { label: "Online", farbe: C.green },
+        sonstiges: { label: "Sonstiges", farbe: "#cbd5e1" },
+      };
+    }
+
+    _ichEintraege(ich) {
+      const runde = (this._spieltage || []).filter((t) => t.ergebnisse.some((e) => e.spieler === ich)).map((t) => {
+        const e = t.ergebnisse.find((x) => x.spieler === ich);
+        return { quelle: "runde", id: t.id, datum: t.datum, beginn: t.beginn, ende: t.ende, dauer: t.dauer_h, art: "runde", spielart: "cash",
+          blinds: t.blinds || "", ort: t.ort || "", einsatz: e.einsatz, gewinn: e.gewinn, notiz: t.bezeichnung || "", tag: t };
+      });
+      const eigene = (this._sessions || []).map((x) => ({ quelle: "eigen", id: x.id, datum: x.datum, beginn: x.beginn, ende: x.ende, dauer: x.dauer_h,
+        art: x.art, spielart: x.spielart, blinds: x.blinds || "", ort: x.ort || "", einsatz: x.einsatz, gewinn: x.gewinn, notiz: x.notiz || "", session: x }));
+      return [...runde, ...eigene].sort((a, b) => (a.datum + (a.beginn || "")).localeCompare(b.datum + (b.beginn || "")));
+    }
+
+    _seiteIch(d) {
+      const ich = this._ichId(d);
+      if (!ich) return { stats: "", body: `<div class="card"><div class="leer">Spieler „${esc(this._config.ich)}“ gibt es in der Integration nicht. Prüfe <b>ich:</b> in der Kartenkonfiguration.</div></div>` };
+      if (this._spieltageSig !== this._sig && !this._laedt) this._ladeSpieltage();
+      if (this._sessionsSig !== this._sig && !this._laedtS) this._ladeSessions();
+      if (!this._spieltage || !this._sessions) {
+        const f = this._ladeFehler || this._ladeFehlerS;
+        return { stats: "", body: `<div class="card"><div class="leer">${f ? esc(f) : "Lade deine Spiele …"}</div></div>` };
+      }
+      const ARTEN = this._arten();
+      const alle = this._ichEintraege(ich);
+      this._ichAlle = alle;
+      const summe = (l, k) => l.reduce((a, x) => a + (x[k] || 0), 0);
+      const mitZeit = alle.filter((x) => x.dauer);
+      const stunden = summe(mitZeit, "dauer");
+      const gesG = summe(alle, "gewinn"), gesE = summe(alle, "einsatz");
+      const orteAnz = new Set(alle.map((x) => x.ort).filter(Boolean)).size;
+      const stats = `
+          ${this._tile("Bilanz", `<span style="color:${vz(gesG)}">${eurKurz(gesG)}</span>`, alle.length ? `Ø ${eur(gesG / alle.length)} pro Session` : "")}
+          ${this._tile("Sessions", alle.length, `${orteAnz} ${orteAnz === 1 ? "Ort" : "Orte"}`)}
+          ${this._tile("Spielzeit", stunden ? zahl(stunden, 1) + " h" : "–", stunden ? `${eur(summe(mitZeit, "gewinn") / stunden)}/h` : "keine Uhrzeiten")}
+          ${this._tile("ROI", gesE ? zahl(((gesE + gesG) / gesE) * 100, 1) + " %" : "–", `${Math.round(gesE).toLocaleString("de-DE")} € eingesetzt`)}`;
+
+      // Bilanz nach Art
+      const proArt = Object.keys(ARTEN).map((k) => {
+        const l = alle.filter((x) => x.art === k);
+        const z = l.filter((x) => x.dauer);
+        const h = summe(z, "dauer");
+        return { k, n: l.length, g: summe(l, "gewinn"), e: summe(l, "einsatz"), ph: h ? summe(z, "gewinn") / h : null, plus: l.filter((x) => x.gewinn > 0).length };
+      }).filter((x) => x.n);
+      const mx = Math.max(1, ...proArt.map((x) => Math.abs(x.g)));
+      const artZeilen = proArt.map((x) => {
+        const w = Math.max(1.5, (Math.abs(x.g) / mx) * 50), pos = x.g >= 0, a = ARTEN[x.k];
+        return `<div class="row">
+          <div class="rz"><span class="dot" style="background:${a.farbe};box-shadow:0 0 8px ${a.farbe}88"></span>
+            <div class="rn">${esc(a.label)}</div><div class="rg" style="color:${vz(x.g)}">${eur(x.g)}</div></div>
+          <div class="bar"><b></b><i style="left:${pos ? 50 : 50 - w}%;width:${w}%;background:${pos ? C.green : C.red}"></i></div>
+          <div class="rs"><span>${x.n} ${x.n === 1 ? "Session" : "Sessions"}</span><span>Ø ${eur(x.g / x.n)}</span>${x.ph != null ? `<span>${eur(x.ph)}/h</span>` : ""}<span>${Math.round((x.plus / x.n) * 100)} % im Plus</span></div>
+        </div>`;
+      }).join("");
+
+      // Rekorde
+      const best = alle.length ? alle.reduce((a, x) => (x.gewinn > a.gewinn ? x : a)) : null;
+      const worst = alle.length ? alle.reduce((a, x) => (x.gewinn < a.gewinn ? x : a)) : null;
+      const lang = mitZeit.length ? mitZeit.reduce((a, x) => (x.dauer > a.dauer ? x : a)) : null;
+      const gruppe = (key) => {
+        const m = new Map();
+        alle.forEach((x) => { const k = x[key]; if (!k) return; const v = m.get(k) || { n: 0, g: 0 }; v.n++; v.g += x.gewinn; m.set(k, v); });
+        return [...m.entries()];
+      };
+      const lieblingsort = gruppe("ort").sort((a, b) => b[1].n - a[1].n || b[1].g - a[1].g)[0];
+      const besteBlinds = gruppe("blinds").sort((a, b) => b[1].g - a[1].g)[0];
+      const plus = alle.filter((x) => x.gewinn > 0).length, minus = alle.filter((x) => x.gewinn < 0).length;
+      const beschr = (x) => `${datumDe(x.datum)} · ${esc(ARTEN[x.art].label)}`;
+      const rekorde = `<div class="rekorde r3">
+        ${this._tile("Beste Session", best ? `<span style="color:${vz(best.gewinn)}">${eur(best.gewinn)}</span>` : "–", best ? beschr(best) : "")}
+        ${this._tile("Schlechteste Session", worst ? `<span style="color:${vz(worst.gewinn)}">${eur(worst.gewinn)}</span>` : "–", worst ? beschr(worst) : "")}
+        ${this._tile("Längste Session", lang ? zahl(lang.dauer, 1) + " h" : "–", lang ? beschr(lang) : "")}
+        ${this._tile("Lieblingsort", lieblingsort ? esc(lieblingsort[0]) : "–", lieblingsort ? `${lieblingsort[1].n}× · ${eur(lieblingsort[1].g)}` : "Ort beim Eintragen angeben")}
+        ${this._tile("Beste Blinds", besteBlinds ? esc(besteBlinds[0]) : "–", besteBlinds ? `${besteBlinds[1].n}× · ${eur(besteBlinds[1].g)}` : "Blinds beim Eintragen angeben")}
+        ${this._tile("Siegquote", plus + minus ? Math.round((plus / (plus + minus)) * 100) + " %" : "–", `${plus} Plus · ${minus} Minus`)}
+      </div>`;
+
+      // Pro Jahr
+      const jahreAlle = [...new Set(alle.map((x) => x.datum.slice(0, 4)))].sort().reverse();
+      const proJahr = jahreAlle.map((j) => {
+        const l = alle.filter((x) => x.datum.startsWith(j));
+        return `<tr><td class="links">${j}</td><td class="num">${l.length}</td><td class="num">${Math.round(summe(l, "einsatz")).toLocaleString("de-DE")} €</td>
+          <td class="num" style="color:${vz(summe(l, "gewinn"))};font-weight:700">${eur(summe(l, "gewinn"))}</td></tr>`;
+      }).join("");
+
+      // Liste mit Filtern
+      let liste = alle.slice();
+      if (this._ichArt !== "alle") liste = liste.filter((x) => x.art === this._ichArt);
+      if (this._ichJahr !== "alle") liste = liste.filter((x) => x.datum.startsWith(this._ichJahr));
+      if (this._ichBlinds !== "alle") liste = liste.filter((x) => x.blinds === this._ichBlinds);
+      const { key, ab } = this._ichSort;
+      const wert = { datum: (x) => x.datum + (x.beginn || ""), gewinn: (x) => x.gewinn, verlust: (x) => -x.gewinn, einsatz: (x) => x.einsatz, dauer: (x) => x.dauer }[key];
+      liste.sort((a, b) => {
+        const va = wert(a), vb = wert(b);
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        const c = va < vb ? -1 : va > vb ? 1 : 0;
+        return c ? (ab ? -c : c) : b.datum.localeCompare(a.datum);
+      });
+      const pf = (k) => (key === k ? (ab ? " ↓" : " ↑") : "");
+      const sortBtn = (k, l) => `<button class="fc ${key === k ? "an" : ""}" data-isort="${k}" aria-pressed="${key === k}">${l}<span class="pf">${pf(k)}</span></button>`;
+      const th = (k, l, cls = "") => `<th class="${cls}"><button class="${key === k ? "an" : ""}" data-isort="${k}">${l}${pf(k)}</button></th>`;
+      const artenDa = Object.keys(ARTEN).filter((k) => alle.some((x) => x.art === k));
+      const blindsDa = [...new Set(alle.map((x) => x.blinds).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de", { numeric: true }));
+      const zeilen = liste.map((x) => {
+        const a = ARTEN[x.art];
+        const zeit = x.beginn && x.ende ? `${x.beginn}–${x.ende}` : "";
+        const ph = x.dauer ? x.gewinn / x.dauer : null;
+        return `<tr>
+          <td>${datumDe(x.datum)}${zeit ? `<span class="klein">${zeit}</span>` : ""}</td>
+          <td><span class="art" style="color:${a.farbe};border-color:${a.farbe}66;background:${a.farbe}14">${esc(a.label)}</span>${x.art !== "runde" ? `<span class="klein">${x.spielart === "turnier" ? "Turnier" : "Cash Game"}</span>` : ""}</td>
+          <td class="hm">${esc(x.ort) || "–"}${x.notiz ? `<span class="klein">${esc(x.notiz)}</span>` : ""}</td>
+          <td>${esc(x.blinds) || "–"}</td>
+          <td class="num hm">${x.dauer ? zahl(x.dauer, 1) + " h" : "–"}</td>
+          <td class="num">${zahl(x.einsatz, 2)} €</td>
+          <td class="num" style="color:${vz(x.gewinn)};font-weight:700">${eur(x.gewinn)}</td>
+          <td class="num hm">${ph != null ? eur(ph) : "–"}</td>
+          <td><button class="ed" data-iedit="${x.quelle}:${esc(x.id)}" aria-label="Bearbeiten" title="${x.quelle === "runde" ? "Spieltag der Runde bearbeiten" : "Session bearbeiten"}">✎</button></td>
+        </tr>`;
+      }).join("");
+      const lz = liste.filter((x) => x.dauer), lh = summe(lz, "dauer");
+      const fuss = liste.length ? `<tfoot><tr>
+          <td>Summe</td><td>${liste.length} ${liste.length === 1 ? "Session" : "Sessions"}</td><td class="hm"></td><td></td>
+          <td class="num hm">${lh ? zahl(lh, 1) + " h" : ""}</td>
+          <td class="num">${zahl(summe(liste, "einsatz"), 2)} €</td>
+          <td class="num" style="color:${vz(summe(liste, "gewinn"))}">${eur(summe(liste, "gewinn"))}</td>
+          <td class="num hm">${lh ? eur(summe(lz, "gewinn") / lh) : ""}</td><td></td></tr></tfoot>` : "";
+
+      const body = `
+        <div class="grid ich">
+          <div class="col">
+            <div class="card"><div class="h">Nach Spielart</div>${artZeilen || '<div class="leer">Noch keine Sessions.</div>'}</div>
+            <div class="card"><div class="h">Rekorde</div>${rekorde}</div>
+          </div>
+          <div class="col">
+            <div class="card"><div class="h">Verlauf <small>Kontostand über alle Sessions</small></div><div class="chartbox" id="chartbox"></div></div>
+            <div class="card"><div class="h">Pro Jahr</div>${proJahr ? `<table class="tbl"><thead><tr><th class="links">Jahr</th><th class="num">Sessions</th><th class="num">Einsatz</th><th class="num">Bilanz</th></tr></thead><tbody>${proJahr}</tbody></table>` : '<div class="leer">–</div>'}</div>
+          </div>
+        </div>
+        <div class="card filter">
+          <div class="frow"><div class="flab">Sortieren</div><div class="fchips">
+            ${sortBtn("datum", "Datum")}${sortBtn("gewinn", "Gewinn")}${sortBtn("verlust", "Verlust")}${sortBtn("einsatz", "Einsatz")}${sortBtn("dauer", "Dauer")}
+          </div></div>
+          <div class="frow"><div class="flab">Art</div><div class="fchips">
+            <button class="fc ${this._ichArt === "alle" ? "an" : ""}" data-iart="alle">Alle</button>
+            ${artenDa.map((k) => `<button class="fc ${this._ichArt === k ? "an" : ""}" data-iart="${k}">${esc(ARTEN[k].label)}</button>`).join("")}
+          </div></div>
+          <div class="frow"><div class="flab">Jahr</div><div class="fchips">
+            <button class="fc ${this._ichJahr === "alle" ? "an" : ""}" data-ijahr="alle">Alle</button>
+            ${jahreAlle.map((j) => `<button class="fc ${this._ichJahr === j ? "an" : ""}" data-ijahr="${j}">${j}</button>`).join("")}
+          </div></div>
+          ${blindsDa.length ? `<div class="frow"><div class="flab">Blinds</div><div class="fchips">
+            <button class="fc ${this._ichBlinds === "alle" ? "an" : ""}" data-iblinds="alle">Alle</button>
+            ${blindsDa.map((b) => `<button class="fc ${this._ichBlinds === b ? "an" : ""}" data-iblinds="${esc(b)}">${esc(b)}</button>`).join("")}
+          </div></div>` : ""}
+        </div>
+        <div class="card">
+          <div class="h">Alle Sessions <small>${liste.length} von ${alle.length}</small></div>
+          ${liste.length ? `<div class="scroll"><table class="tbl liste">
+            <thead><tr>${th("datum", "Datum")}<th>Art</th><th class="hm">Ort</th><th>Blinds</th>${th("dauer", "Dauer", "num hm")}${th("einsatz", "Einsatz", "num")}${th(key === "verlust" ? "verlust" : "gewinn", key === "verlust" ? "Verlust" : "Gewinn", "num")}<th class="num hm">€/h</th><th></th></tr></thead>
+            <tbody>${zeilen}</tbody>${fuss}</table></div>` : '<div class="leer">Keine Sessions für diese Auswahl.</div>'}
+        </div>`;
+      return { stats, body };
+    }
+
+    _bindeIch() {
+      const r = this._root;
+      r.querySelectorAll("[data-isort]").forEach((b) => b.addEventListener("click", () => {
+        const k = b.dataset.isort;
+        if (this._ichSort.key === k) this._ichSort.ab = !this._ichSort.ab;
+        else this._ichSort = { key: k, ab: true };
+        this._renderMain();
+      }));
+      r.querySelectorAll("[data-iart]").forEach((b) => b.addEventListener("click", () => { this._ichArt = b.dataset.iart; this._renderMain(); }));
+      r.querySelectorAll("[data-ijahr]").forEach((b) => b.addEventListener("click", () => { this._ichJahr = b.dataset.ijahr; this._renderMain(); }));
+      r.querySelectorAll("[data-iblinds]").forEach((b) => b.addEventListener("click", () => { this._ichBlinds = b.dataset.iblinds; this._renderMain(); }));
+      r.querySelectorAll("[data-iedit]").forEach((b) => b.addEventListener("click", () => {
+        const [quelle, id] = b.dataset.iedit.split(":");
+        const x = (this._ichAlle || []).find((e) => e.quelle === quelle && e.id === id);
+        if (!x) return;
+        if (quelle === "runde") this._oeffneForm(x.tag);
+        else this._oeffneSession(x.session);
+      }));
+      const alle = this._ichAlle || [];
+      if (alle.length) this._beobachteChart((w, h) => this._chartIch(alle, w, h));
+    }
+
+    _chartIch(alle, W, H) {
+      if (alle.length < 2) return `<div class="leer">Der Verlauf erscheint ab der zweiten Session.</div>`;
+      const ARTEN = this._arten();
+      const L = 50, R = 16, T = 12, B = 24;
+      let kum = 0;
+      const pkt = alle.map((x) => ({ x, w: (kum = Math.round((kum + x.gewinn) * 100) / 100) }));
+      let min = Math.min(0, ...pkt.map((p) => p.w)), max = Math.max(0, ...pkt.map((p) => p.w));
+      const pad = (max - min) * 0.08 || 10; min -= pad; max += pad;
+      const px = (i) => L + (i / (pkt.length - 1)) * (W - L - R);
+      const py = (w) => T + (1 - (w - min) / (max - min)) * (H - T - B);
+      const zeilenMax = Math.max(3, Math.min(7, Math.floor(H / 45)));
+      const schritt = [50, 100, 200, 250, 500, 1000, 2000, 5000].find((s) => (max - min) / s <= zeilenMax) || 10000;
+      let grid = "";
+      for (let g = Math.ceil(min / schritt) * schritt; g <= max; g += schritt) {
+        grid += `<line x1="${L}" x2="${W - R}" y1="${py(g)}" y2="${py(g)}" stroke="rgba(255,255,255,${g === 0 ? 0.28 : 0.06})" ${g === 0 ? 'stroke-dasharray="4 4"' : ""}/>
+          <text x="${L - 8}" y="${py(g) + 4}" text-anchor="end" font-size="11" fill="${C.muted}">${(g || 0).toLocaleString("de-DE")}</text>`;
+      }
+      let jahre = "", lj = "", lx = -99;
+      pkt.forEach((p, i) => {
+        const j = p.x.datum.slice(0, 4);
+        if (j !== lj && px(i) - lx >= 34) { lj = j; lx = px(i); jahre += `<text x="${px(i) + 2}" y="${H - 7}" font-size="11" fill="${C.muted}">${j}</text>`; }
+      });
+      const pfad = pkt.map((p, i) => `${i ? "L" : "M"}${px(i).toFixed(1)},${py(p.w).toFixed(1)}`).join("");
+      const flaeche = `${pfad}L${px(pkt.length - 1).toFixed(1)},${py(0).toFixed(1)}L${px(0).toFixed(1)},${py(0).toFixed(1)}Z`;
+      const r = pkt.length > 120 ? 2 : 3;
+      const punkte = pkt.map((p, i) => `<circle cx="${px(i).toFixed(1)}" cy="${py(p.w).toFixed(1)}" r="${r}" fill="${ARTEN[p.x.art].farbe}"><title>${datumDe(p.x.datum)} · ${esc(ARTEN[p.x.art].label)} · ${eur(p.x.gewinn)}</title></circle>`).join("");
+      const leg = Object.keys(ARTEN).filter((k) => alle.some((x) => x.art === k)).map((k, i) =>
+        `<g transform="translate(${L + 4 + i * 110},${T + 4})"><circle r="4" cx="4" cy="0" fill="${ARTEN[k].farbe}"/><text x="13" y="4" font-size="11" fill="${C.muted}">${esc(ARTEN[k].label)}</text></g>`).join("");
+      return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="display:block" role="img" aria-label="Kumulierter Gewinn über alle eigenen Sessions">
+        <defs><linearGradient id="gi" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${C.gold}" stop-opacity="0.22"/><stop offset="1" stop-color="${C.gold}" stop-opacity="0"/></linearGradient></defs>
+        ${grid}${jahre}<path d="${flaeche}" fill="url(#gi)"/>
+        <path d="${pfad}" fill="none" stroke="${C.gold}" stroke-width="2.4" stroke-linejoin="round" style="filter:drop-shadow(0 0 5px ${C.gold}99)"/>
+        ${punkte}${leg}</svg>`;
+    }
+
+    // ------------------------------------------------------------ Session-Dialog
+    _oeffneSession(x = null) {
+      const jetzt = heute();
+      const eig = this._sessions || [];
+      const letzte = eig.length ? eig[eig.length - 1] : null;
+      const d = this._daten() || { orte: [] };
+      const alsText = (v) => String(Math.round(v * 100) / 100).replace(".", ",");
+      const orte = [...new Set([...eig.map((e) => e.ort), ...(d.orte || [])].filter(Boolean))];
+      const blinds = [...new Set([...eig.map((e) => e.blinds), ...(this._spieltage || []).map((t) => t.blinds)].filter(Boolean))];
+      this._form = null;
+      this._sform = x
+        ? { id: x.id, datum: x.datum, beginn: x.beginn || "", ende: x.ende || "", art: x.art, spielart: x.spielart, blinds: x.blinds || "", ort: x.ort || "",
+            einsatz: alsText(x.einsatz), gewinn: x.gewinn ? alsText(x.gewinn) : "", notiz: x.notiz || "", orte, blindsListe: blinds, fehler: "", busy: false }
+        : { id: null, datum: jetzt.datum, beginn: "", ende: "", art: letzte ? letzte.art : "casino", spielart: letzte ? letzte.spielart : "cash",
+            blinds: letzte ? letzte.blinds : "", ort: letzte ? letzte.ort : "", einsatz: "", gewinn: "", notiz: "", orte, blindsListe: blinds, fehler: "", busy: false };
+      this._renderSession();
+    }
+
+    _renderSession() {
+      const f = this._sform;
+      if (!f) return;
+      const ARTEN = this._arten();
+      const artChips = ["casino", "home_game", "online", "sonstiges"].map((k) =>
+        `<button class="chip ${f.art === k ? "an" : ""}" data-sart="${k}" aria-pressed="${f.art === k}">${ARTEN[k].label}</button>`).join("");
+      const spChips = [["cash", "Cash Game"], ["turnier", "Turnier"]].map(([k, l]) =>
+        `<button class="chip ${f.spielart === k ? "an" : ""}" data-sspiel="${k}" aria-pressed="${f.spielart === k}">${l}</button>`).join("");
+      this._modal.innerHTML = `
+        <div class="overlay" id="ov">
+          <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dt">
+            <h2 id="dt">${f.id ? "Session bearbeiten" : "Session eintragen"}</h2>
+            <div class="sub">Für Spiele außerhalb der Runde. Gewinn = Endstand minus Einsatz.</div>
+            <div class="f4">
+              <label class="fl">Datum<input type="date" id="s-datum" value="${f.datum}"></label>
+              <label class="fl">Beginn<input type="time" id="s-beginn" value="${f.beginn}"></label>
+              <label class="fl">Ende<input type="time" id="s-ende" value="${f.ende}"></label>
+            </div>
+            <div class="sec"><span>Art</span></div>
+            <div class="chips">${artChips}</div>
+            <div class="chips" style="margin-top:8px">${spChips}</div>
+            <div class="f2">
+              <label class="fl">Ort<input id="s-ort" list="s-orte" value="${esc(f.ort)}" placeholder="z. B. Spielbank Duisburg" autocomplete="off"></label>
+              <label class="fl">Blinds<input id="s-blinds" list="s-blindsl" value="${esc(f.blinds)}" placeholder="z. B. 1/2" autocomplete="off"></label>
+            </div>
+            <datalist id="s-orte">${f.orte.map((o) => `<option value="${esc(o)}"></option>`).join("")}</datalist>
+            <datalist id="s-blindsl">${f.blindsListe.map((o) => `<option value="${esc(o)}"></option>`).join("")}</datalist>
+            <div class="f2">
+              <label class="fl">Einsatz € (inkl. Rebuys)<input id="s-einsatz" inputmode="decimal" value="${esc(f.einsatz)}" placeholder="0"></label>
+              <label class="fl">Gewinn €<div class="gw"><button class="pm" id="s-pm" aria-label="Vorzeichen umschalten">±</button><input id="s-gewinn" inputmode="decimal" value="${esc(f.gewinn)}" placeholder="0"></div></label>
+            </div>
+            <label class="fl" style="margin-top:10px">Notiz (optional)<input id="s-notiz" value="${esc(f.notiz)}" placeholder="z. B. Turniername, Tischbesonderheiten"></label>
+            <div id="s-info"></div>
+            <div class="msg" id="msg">${esc(f.fehler)}</div>
+            <div class="fuss">
+              ${f.id ? '<button class="btn rot" id="s-loeschen">Löschen</button><span style="flex:1"></span>' : ""}
+              <button class="btn" id="abbr">Abbrechen</button>
+              <button class="btn gold" id="s-speichern" ${f.busy ? "disabled" : ""}>${f.id ? "Änderungen speichern" : "Session speichern"}</button>
+            </div>
+          </div>
+        </div>`;
+      const $ = (q) => this._modal.querySelector(q);
+      const schliessen = () => { this._sform = null; this._modal.innerHTML = ""; };
+      $("#ov").addEventListener("click", (ev) => { if (ev.target.id === "ov" && !f.busy) schliessen(); });
+      $("#abbr").addEventListener("click", schliessen);
+      [["#s-datum", "datum"], ["#s-beginn", "beginn"], ["#s-ende", "ende"], ["#s-ort", "ort"], ["#s-blinds", "blinds"], ["#s-notiz", "notiz"]].forEach(([q, k]) =>
+        $(q).addEventListener("input", (ev) => { f[k] = ev.target.value; this._sessionInfo(); }));
+      $("#s-einsatz").addEventListener("input", (ev) => { f.einsatz = ev.target.value; this._sessionInfo(); });
+      $("#s-gewinn").addEventListener("input", (ev) => { f.gewinn = ev.target.value; this._sessionInfo(); });
+      $("#s-pm").addEventListener("click", () => {
+        const t = f.gewinn.trim();
+        f.gewinn = t.startsWith("-") ? t.slice(1) : "-" + t;
+        $("#s-gewinn").value = f.gewinn; this._sessionInfo();
+      });
+      this._modal.querySelectorAll("[data-sart]").forEach((b) => b.addEventListener("click", () => { f.art = b.dataset.sart; this._renderSession(); }));
+      this._modal.querySelectorAll("[data-sspiel]").forEach((b) => b.addEventListener("click", () => { f.spielart = b.dataset.sspiel; this._renderSession(); }));
+      $("#s-speichern").addEventListener("click", () => this._speichereSession());
+      if (f.id) $("#s-loeschen").addEventListener("click", () => this._loescheSession());
+      this._sessionInfo();
+    }
+
+    _sessionInfo() {
+      const f = this._sform;
+      const box = this._modal.querySelector("#s-info");
+      if (!f || !box) return;
+      if (f.fehler) { f.fehler = ""; const m = this._modal.querySelector("#msg"); if (m) m.textContent = ""; }
+      const e = parse(f.einsatz), g = parse(f.gewinn) ?? 0;
+      if (e == null || Number.isNaN(e) || Number.isNaN(g)) { box.innerHTML = ""; return; }
+      const dauer = f.beginn && f.ende ? (() => {
+        const [bh, bm] = f.beginn.split(":").map(Number), [eh, em] = f.ende.split(":").map(Number);
+        let m = eh * 60 + em - (bh * 60 + bm); if (m <= 0) m += 1440; return m / 60;
+      })() : null;
+      const ok = g >= -e;
+      box.innerHTML = `<div class="summe ${ok ? "ok" : "nok"}"><div><b>Endstand ${zahl(e + g, 2)} €</b>
+        <div style="font-size:12px;color:${C.muted};margin-top:2px">${ok ? `Ergebnis ${eur(g)}${dauer ? ` · ${zahl(dauer, 1)} h · ${eur(g / dauer)}/h` : ""}` : "Der Verlust ist größer als der Einsatz."}</div></div></div>`;
+    }
+
+    async _speichereSession() {
+      const f = this._sform;
+      if (!f || f.busy) return;
+      const fehler = (t) => { f.fehler = t; const m = this._modal.querySelector("#msg"); if (m) m.textContent = t; };
+      const e = parse(f.einsatz), g = parse(f.gewinn) ?? 0;
+      if (!f.datum) return fehler("Bitte ein Datum angeben.");
+      if (e == null || Number.isNaN(e) || e < 0) return fehler("Bitte einen Einsatz angeben (0 für Freerolls).");
+      if (Number.isNaN(g)) return fehler("Der Gewinn ist keine Zahl.");
+      if (g < -e) return fehler("Der Verlust ist größer als der Einsatz.");
+      const daten = { datum: f.datum, art: f.art, spielart: f.spielart, blinds: f.blinds.trim(), ort: f.ort.trim(), einsatz: e, gewinn: g, notiz: f.notiz.trim() };
+      if (f.beginn) daten.beginn = f.beginn;
+      if (f.ende) daten.ende = f.ende;
+      if (f.id) daten.id = f.id;
+      f.busy = true;
+      const btn = this._modal.querySelector("#s-speichern");
+      if (btn) { btn.disabled = true; btn.textContent = "Speichert …"; }
+      try {
+        await this._hass.callService("poker_home_games", f.id ? "session_bearbeiten" : "session_eintragen", daten);
+        const bearbeitet = !!f.id;
+        this._sform = null; this._modal.innerHTML = "";
+        this._toast(bearbeitet ? "Session geändert" : "Session gespeichert");
+      } catch (err) {
+        f.busy = false;
+        if (btn) { btn.disabled = false; btn.textContent = f.id ? "Änderungen speichern" : "Session speichern"; }
+        fehler((err && err.message) || "Speichern fehlgeschlagen.");
+      }
+    }
+
+    async _loescheSession() {
+      const f = this._sform;
+      if (!f || !f.id) return;
+      if (!window.confirm(`Session vom ${datumDe(f.datum)} wirklich löschen?`)) return;
+      try {
+        await this._hass.callService("poker_home_games", "session_loeschen", { id: f.id });
+        this._sform = null; this._modal.innerHTML = "";
+        this._toast("Session gelöscht");
+      } catch (err) {
+        f.fehler = (err && err.message) || "Löschen fehlgeschlagen.";
+        const m = this._modal.querySelector("#msg"); if (m) m.textContent = f.fehler;
+      }
     }
 
     _tile(l, v, s) {
@@ -779,10 +1194,10 @@
       liste.forEach((s) => (werte[s.id] = { e: String(this._config.standard_einsatz), g: "" }));
       if (tag) tag.ergebnisse.forEach((e) => (werte[e.spieler] = { e: alsText(e.einsatz), g: e.gewinn ? alsText(e.gewinn) : "" }));
       this._form = tag
-        ? { id: tag.id, datum: tag.datum, beginn: tag.beginn || "", ende: tag.ende || "", bez: tag.bezeichnung || "", ort: tag.ort || "",
+        ? { id: tag.id, datum: tag.datum, beginn: tag.beginn || "", ende: tag.ende || "", bez: tag.bezeichnung || "", ort: tag.ort || "", blinds: tag.blinds || "",
             alle: liste, sel: new Set(tag.ergebnisse.map((e) => e.spieler)), werte, orte: d.orte,
             ignorieren: false, fehler: "", busy: false }
-        : { id: null, datum: jetzt.datum, beginn: "19:00", ende: jetzt.zeit, bez: "", ort: (d.letzter && d.letzter.ort) || "",
+        : { id: null, datum: jetzt.datum, beginn: "19:00", ende: jetzt.zeit, bez: "", ort: (d.letzter && d.letzter.ort) || "", blinds: (d.letzter && d.letzter.blinds) || "",
             alle: liste, sel: new Set(aktive.map((s) => s.id)), werte, orte: d.orte,
             ignorieren: false, fehler: "", busy: false };
       this._renderForm();
@@ -812,8 +1227,9 @@
               <label class="fl">Beginn<input type="time" id="f-beginn" value="${f.beginn}"></label>
               <label class="fl">Ende<input type="time" id="f-ende" value="${f.ende}"></label>
             </div>
-            <div class="f2">
+            <div class="f3">
               <label class="fl">Ort (optional)<input id="f-ort" list="orte-liste" value="${esc(f.ort)}" placeholder="z. B. Bei Marco" autocomplete="off"></label>
+              <label class="fl">Blinds (optional)<input id="f-blinds" value="${esc(f.blinds)}" placeholder="z. B. 0,10/0,20" autocomplete="off"></label>
               <label class="fl">Bezeichnung (optional)<input id="f-bez" value="${esc(f.bez)}" placeholder="z. B. Malle 2027"></label>
             </div>
             <datalist id="orte-liste">${(f.orte || []).map((o) => `<option value="${esc(o)}"></option>`).join("")}</datalist>
@@ -839,6 +1255,7 @@
       $("#f-ende").addEventListener("input", (ev) => (f.ende = ev.target.value));
       $("#f-bez").addEventListener("input", (ev) => (f.bez = ev.target.value));
       $("#f-ort").addEventListener("input", (ev) => (f.ort = ev.target.value));
+      $("#f-blinds").addEventListener("input", (ev) => (f.blinds = ev.target.value));
       if (f.id) $("#f-loeschen").addEventListener("click", () => this._loescheTag(f.id));
       this._modal.querySelectorAll("[data-chip]").forEach((b) => b.addEventListener("click", () => {
         const id = b.dataset.chip;
@@ -901,7 +1318,7 @@
       const summe = Math.round(ergebnisse.reduce((a, x) => a + x.gewinn, 0) * 100) / 100;
       if (Math.abs(summe) >= 0.005 && !f.ignorieren) return this._zeigeFehler(`Die Gewinne ergeben ${eur(summe)} statt 0 €. Korrigieren oder „Trotzdem speichern“ anhaken.`);
 
-      const daten = { datum: f.datum, bezeichnung: f.bez.trim(), ort: f.ort.trim(), ergebnisse, summe_ignorieren: !!f.ignorieren };
+      const daten = { datum: f.datum, bezeichnung: f.bez.trim(), ort: f.ort.trim(), blinds: (f.blinds || "").trim(), ergebnisse, summe_ignorieren: !!f.ignorieren };
       if (f.id) daten.id = f.id;
       if (f.beginn) daten.beginn = f.beginn;
       if (f.ende) daten.ende = f.ende;
