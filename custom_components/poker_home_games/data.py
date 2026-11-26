@@ -231,6 +231,20 @@ class PokerData:
         self.hass.bus.async_fire(EVENT_SPIELTAG_GEAENDERT, info)
         return info
 
+    async def async_zeiten_setzen(
+        self, zeiten: list[tuple[str, time | None, time | None]]
+    ) -> int:
+        """Beginn/Ende für mehrere Spieltage auf einmal setzen (ein Speichervorgang)."""
+        geaendert = 0
+        for spieltag_id, beginn, ende in zeiten:
+            tag = self._finde(spieltag_id)
+            tag["beginn"] = beginn.strftime("%H:%M") if beginn else None
+            tag["ende"] = ende.strftime("%H:%M") if ende else None
+            geaendert += 1
+        if geaendert:
+            await self.async_save()
+        return geaendert
+
     async def async_spieltag_loeschen(self, spieltag_id: str) -> dict[str, Any]:
         tag = self._finde(spieltag_id)
         info = self.spieltag_info(tag)

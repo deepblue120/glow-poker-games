@@ -14,7 +14,7 @@
  *   # ich_titel: Meine Spiele
  */
 (() => {
-  const VERSION = "1.6.0";
+  const VERSION = "1.7.0";
   const TAG = "mg-poker-dashboard";
 
   const DEFAULTS = {
@@ -226,6 +226,20 @@
 
     .f2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
     .hr { display:inline-flex; gap:14px; align-items:baseline; }
+    .dlg.breit { max-width:680px; }
+    .zeitknopf { color:${C.gold}; border-color:${C.gold}66; }
+    .vorlage { display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:${C.gold}0f; border:1px solid ${C.gold}44; border-radius:14px; padding:10px 12px; margin-bottom:12px; }
+    .vorlage span { font-size:12px; color:${C.gold}; font-weight:600; letter-spacing:1px; text-transform:uppercase; margin-right:4px; }
+    .vorlage input { width:120px; }
+    .zliste { max-height:52vh; overflow:auto; border:1px solid ${C.tileBorder}; border-radius:14px; padding:4px 10px; }
+    .zr { display:grid; grid-template-columns:minmax(0,1fr) 112px 112px 92px; gap:8px; align-items:center; padding:7px 0; border-top:1px solid ${C.tileBorder}; }
+    .zr:first-child { border-top:none; }
+    .zr input { padding:7px 8px; font-size:14px; }
+    .zd { min-width:0; display:flex; flex-direction:column; }
+    .zd b { font-weight:600; font-size:14px; }
+    .zd span { font-size:11.5px; color:${C.muted}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .zh { font-size:11.5px; color:${C.muted}; white-space:nowrap; }
+    .zstand { font-size:12.5px; color:${C.muted}; align-self:center; }
     .hint { font-size:12.5px; color:${C.muted}; margin-top:6px; min-height:16px; }
     .hint b { color:${C.gold}; font-weight:600; }
     .segs { display:inline-flex; gap:4px; align-items:center; flex-wrap:wrap; justify-content:flex-end; text-transform:none; letter-spacing:0; }
@@ -339,6 +353,8 @@
       .f4 { grid-template-columns:1fr 1fr; }
       .f4 label:first-child { grid-column:1 / -1; }
       .f2, .f3 { grid-template-columns:1fr; }
+      .zr { grid-template-columns:minmax(0,1fr) 92px 92px; }
+      .zh { display:none; }
       .rekorde.r3 { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .grid.ich .chartbox { height:240px; }
       .eing { grid-template-columns:minmax(60px,1fr) 84px 128px; }
@@ -540,6 +556,7 @@
       const jahre = [...new Set(tage.map((t) => t.datum.slice(0, 4)))].sort().reverse();
       if (this._listeJahr !== "alle") tage = tage.filter((t) => t.datum.startsWith(this._listeJahr));
       const orte = [...new Set(this._spieltage.map((t) => t.ort).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"));
+      const ohneZeit = this._spieltage.filter((t) => !t.beginn || !t.ende).length;
       if (this._listeOrt !== "alle") tage = tage.filter((t) => (t.ort || "") === this._listeOrt);
 
       const namen = new Map();
@@ -640,6 +657,7 @@
             <button class="fc ${this._listeJahr === "alle" ? "an" : ""}" data-jahr="alle">Alle</button>
             ${jahre.map((j) => `<button class="fc ${this._listeJahr === j ? "an" : ""}" data-jahr="${j}">${j}</button>`).join("")}
             <button class="fc ${end ? "an" : ""}" id="endstand" aria-pressed="${end}" style="margin-left:auto">Endstand anzeigen</button>
+            ${ohneZeit ? `<button class="fc zeitknopf" id="zeiten">Uhrzeiten nachtragen (${ohneZeit})</button>` : ""}
           </div></div>
           ${orte.length ? `<div class="frow"><div class="flab">Ort</div><div class="fchips">
             <button class="fc ${this._listeOrt === "alle" ? "an" : ""}" data-ort="alle">Alle</button>
@@ -673,6 +691,8 @@
         const tag = (this._spieltage || []).find((t) => t.id === b.dataset.edit);
         if (tag) this._oeffneForm(tag);
       }));
+      const zb = r.querySelector("#zeiten");
+      if (zb) zb.addEventListener("click", () => this._oeffneZeiten());
       const end = r.querySelector("#endstand");
       if (end) end.addEventListener("click", () => { this._zeigeEndstand = !this._zeigeEndstand; this._renderMain(); });
     }
@@ -1081,6 +1101,96 @@
         }
       });
       setTimeout(() => ta.focus(), 50);
+    }
+
+    // ------------------------------------------------------------ Uhrzeiten nachtragen
+    _oeffneZeiten() {
+      const ohne = (this._spieltage || []).filter((t) => !t.beginn || !t.ende)
+        .sort((a, b) => b.datum.localeCompare(a.datum));
+      this._form = null; this._sform = null;
+      this._zform = {
+        vb: "19:30", ve: "01:00", fehler: "",
+        rows: ohne.map((t) => ({ id: t.id, datum: t.datum, info: [t.ort, t.bezeichnung].filter(Boolean).join(" · "),
+          n: t.ergebnisse.length, beginn: t.beginn || "", ende: t.ende || "" })),
+      };
+      this._renderZeiten();
+    }
+
+    _renderZeiten() {
+      const z = this._zform;
+      const wt = (iso) => WT[new Date(iso + "T12:00:00").getDay()];
+      const zeilen = z.rows.map((r, i) => `
+        <div class="zr" data-zi="${i}">
+          <div class="zd"><b>${wt(r.datum)} ${datumDe(r.datum)}</b><span>${esc(r.info || `${r.n} Spieler`)}</span></div>
+          <input type="time" data-zb="${i}" value="${r.beginn}" aria-label="Beginn ${datumDe(r.datum)}">
+          <input type="time" data-ze="${i}" value="${r.ende}" aria-label="Ende ${datumDe(r.datum)}">
+          <div class="zh" id="zh-${i}">${r.beginn && r.ende ? mitternachtHinweis("", r.beginn, r.ende).replace("<b>Ende am Folgetag</b> · ", "+1 · ") : ""}</div>
+        </div>`).join("");
+      this._modal.innerHTML = `
+        <div class="overlay" id="ov">
+          <div class="dlg breit" role="dialog" aria-modal="true" aria-labelledby="dt">
+            <h2 id="dt">Uhrzeiten nachtragen</h2>
+            <div class="sub">${z.rows.length} Spieltage ohne Uhrzeit, neueste zuerst. Ende vor Beginn heißt: nach Mitternacht.</div>
+            <div class="vorlage">
+              <span>Vorlage</span>
+              <input type="time" id="z-vb" value="${z.vb}" aria-label="Vorlage Beginn">
+              <input type="time" id="z-ve" value="${z.ve}" aria-label="Vorlage Ende">
+              <button class="btn" id="z-fuellen">In alle leeren Felder</button>
+            </div>
+            <div class="zliste">${zeilen}</div>
+            <div class="msg" id="msg">${esc(z.fehler)}</div>
+            <div class="fuss">
+              <span class="zstand" id="z-stand"></span><span style="flex:1"></span>
+              <button class="btn" id="abbr">Abbrechen</button>
+              <button class="btn gold" id="z-speichern">Speichern</button>
+            </div>
+          </div>
+        </div>`;
+      const $ = (q) => this._modal.querySelector(q);
+      const zu = () => { this._zform = null; this._modal.innerHTML = ""; };
+      const stand = () => {
+        const voll = z.rows.filter((r) => r.beginn && r.ende).length;
+        $("#z-stand").textContent = `${voll} von ${z.rows.length} ausgefüllt`;
+      };
+      const hinweis = (i) => {
+        const r = z.rows[i];
+        $(`#zh-${i}`).innerHTML = r.beginn && r.ende ? mitternachtHinweis("", r.beginn, r.ende).replace("<b>Ende am Folgetag</b> · ", "+1 · ") : "";
+      };
+      $("#ov").addEventListener("click", (ev) => { if (ev.target.id === "ov") zu(); });
+      $("#abbr").addEventListener("click", zu);
+      $("#z-vb").addEventListener("input", (ev) => (z.vb = ev.target.value));
+      $("#z-ve").addEventListener("input", (ev) => (z.ve = ev.target.value));
+      this._modal.querySelectorAll("[data-zb]").forEach((inp) => inp.addEventListener("input", () => {
+        const i = +inp.dataset.zb; z.rows[i].beginn = inp.value; hinweis(i); stand(); $("#msg").textContent = "";
+      }));
+      this._modal.querySelectorAll("[data-ze]").forEach((inp) => inp.addEventListener("input", () => {
+        const i = +inp.dataset.ze; z.rows[i].ende = inp.value; hinweis(i); stand(); $("#msg").textContent = "";
+      }));
+      $("#z-fuellen").addEventListener("click", () => {
+        z.rows.forEach((r, i) => {
+          if (!r.beginn && z.vb) { r.beginn = z.vb; this._modal.querySelector(`[data-zb="${i}"]`).value = z.vb; }
+          if (!r.ende && z.ve) { r.ende = z.ve; this._modal.querySelector(`[data-ze="${i}"]`).value = z.ve; }
+          hinweis(i);
+        });
+        stand();
+        $("#msg").textContent = "";
+      });
+      $("#z-speichern").addEventListener("click", async () => {
+        const halb = z.rows.find((r) => !!r.beginn !== !!r.ende);
+        if (halb) { $("#msg").textContent = `${datumDe(halb.datum)}: bitte Beginn und Ende angeben oder beide leer lassen.`; return; }
+        const zeiten = z.rows.filter((r) => r.beginn && r.ende).map((r) => ({ id: r.id, beginn: r.beginn, ende: r.ende }));
+        if (!zeiten.length) { $("#msg").textContent = "Noch keine Uhrzeit eingetragen."; return; }
+        const btn = $("#z-speichern"); btn.disabled = true; btn.textContent = "Speichert …";
+        try {
+          await this._hass.callService("poker_home_games", "zeiten_setzen", { zeiten });
+          zu();
+          this._toast(`Uhrzeiten für ${zeiten.length} Spieltage gespeichert`);
+        } catch (err) {
+          btn.disabled = false; btn.textContent = "Speichern";
+          $("#msg").textContent = (err && err.message) || "Speichern fehlgeschlagen.";
+        }
+      });
+      stand();
     }
 
     _sessionInfo() {

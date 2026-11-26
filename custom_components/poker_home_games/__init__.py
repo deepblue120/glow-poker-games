@@ -32,6 +32,7 @@ from .const import (
     SERVICE_SESSION_LOESCHEN,
     SERVICE_SESSIONS_ABRUFEN,
     SERVICE_SESSIONS_IMPORTIEREN,
+    SERVICE_ZEITEN_SETZEN,
     SESSION_ARTEN,
     SPIELARTEN,
     SERVICE_SPIELTAG_BEARBEITEN,
@@ -43,7 +44,7 @@ from .data import PokerData, fmt_eur
 
 KARTE_URL = "/poker_home_games/mg-poker-dashboard.js"
 KARTE_DATEI = Path(__file__).parent / "www" / "mg-poker-dashboard.js"
-KARTE_VERSION = "1.8.0"
+KARTE_VERSION = "1.9.0"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -193,6 +194,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             raise ServiceValidationError("Session nicht gefunden") from err
         return info if call.return_response else None
 
+    async def zeiten_setzen(call: ServiceCall) -> ServiceResponse:
+        data = _poker_data(hass)
+        try:
+            n = await data.async_zeiten_setzen(
+                [(z["id"], z.get("beginn"), z.get("ende")) for z in call.data["zeiten"]]
+            )
+        except KeyError as err:
+            raise ServiceValidationError(f"Spieltag nicht gefunden: {err}") from err
+        return {"geaendert": n} if call.return_response else None
+
     async def sessions_importieren(call: ServiceCall) -> ServiceResponse:
         try:
             res = await _poker_data(hass).async_sessions_importieren(call.data["text"])
@@ -209,6 +220,12 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         (SERVICE_SESSION_BEARBEITEN, session_bearbeiten, SESSION_BEARBEITEN_SCHEMA, SupportsResponse.OPTIONAL),
         (SERVICE_SESSION_LOESCHEN, session_loeschen, LOESCHEN_SCHEMA, SupportsResponse.OPTIONAL),
         (SERVICE_SESSIONS_ABRUFEN, sessions_abrufen, None, SupportsResponse.ONLY),
+        (SERVICE_ZEITEN_SETZEN, zeiten_setzen,
+         vol.Schema({vol.Required("zeiten"): vol.All(cv.ensure_list, [vol.Schema({
+             vol.Required("id"): cv.string,
+             vol.Optional("beginn"): vol.Any(None, cv.time),
+             vol.Optional("ende"): vol.Any(None, cv.time),
+         })])}), SupportsResponse.OPTIONAL),
         (SERVICE_SESSIONS_IMPORTIEREN, sessions_importieren,
          vol.Schema({vol.Required("text"): cv.string}), SupportsResponse.OPTIONAL),
     ):

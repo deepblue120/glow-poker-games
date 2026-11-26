@@ -303,6 +303,16 @@
           "description": "Eingefügter Tabellentext inklusive Kopfzeile."
         }
       }
+    },
+    "zeiten_setzen": {
+      "name": "Uhrzeiten setzen",
+      "description": "Setzt Beginn und Ende für mehrere Spieltage auf einmal.",
+      "fields": {
+        "zeiten": {
+          "name": "Zeiten",
+          "description": "Liste mit id, beginn und ende je Spieltag."
+        }
+      }
     }
   },
   "selector": {

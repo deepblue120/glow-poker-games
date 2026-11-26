@@ -200,3 +200,11 @@ sessions_importieren:
       selector:
         text:
           multiline: true
+
+zeiten_setzen:
+  fields:
+    zeiten:
+      required: true
+      example: '[{"id": "abc123", "beginn": "19:30", "ende": "01:00"}]'
+      selector:
+        object:
