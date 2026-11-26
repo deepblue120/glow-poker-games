@@ -39,7 +39,8 @@
           "beginn": "Beginn",
           "ende": "Ende",
           "bezeichnung": "Bezeichnung (optional, z. B. Malle)",
-          "spieler": "Spieler"
+          "spieler": "Spieler",
+          "ort": "Ort (optional)"
         }
       },
       "ergebnisse": {
@@ -111,6 +112,10 @@
         "summe_ignorieren": {
           "name": "Summe ignorieren",
           "description": "Auch speichern, wenn die Gewinne zusammen nicht 0 ergeben."
+        },
+        "ort": {
+          "name": "Ort",
+          "description": "Wo gespielt wurde (optional)."
         }
       }
     },
@@ -121,6 +126,54 @@
     "spieltage_abrufen": {
       "name": "Spieltage abrufen",
       "description": "Liefert alle Spieltage mit Einzelergebnissen (für die Dashboard-Karte)."
+    },
+    "spieltag_bearbeiten": {
+      "name": "Spieltag bearbeiten",
+      "description": "Ersetzt einen vorhandenen Spieltag komplett.",
+      "fields": {
+        "id": {
+          "name": "ID",
+          "description": "ID des Spieltags (aus spieltage_abrufen)."
+        },
+        "datum": {
+          "name": "Datum",
+          "description": "Tag des Spiels."
+        },
+        "beginn": {
+          "name": "Beginn",
+          "description": "Uhrzeit Spielbeginn."
+        },
+        "ende": {
+          "name": "Ende",
+          "description": "Uhrzeit Spielende (nach Mitternacht ist erlaubt)."
+        },
+        "bezeichnung": {
+          "name": "Bezeichnung",
+          "description": "Optional, z. B. Malle."
+        },
+        "ergebnisse": {
+          "name": "Ergebnisse",
+          "description": "Liste mit spieler, einsatz und gewinn je Spieler."
+        },
+        "summe_ignorieren": {
+          "name": "Summe ignorieren",
+          "description": "Auch speichern, wenn die Gewinne zusammen nicht 0 ergeben."
+        },
+        "ort": {
+          "name": "Ort",
+          "description": "Wo gespielt wurde (optional)."
+        }
+      }
+    },
+    "spieltag_loeschen": {
+      "name": "Spieltag löschen",
+      "description": "Löscht einen Spieltag anhand seiner ID.",
+      "fields": {
+        "id": {
+          "name": "ID",
+          "description": "ID des Spieltags (aus spieltage_abrufen)."
+        }
+      }
     }
   }
 }

@@ -144,6 +144,7 @@ class PokerOptionsFlow(OptionsFlow):
                 vol.Optional("beginn"): TimeSelector(),
                 vol.Optional("ende"): TimeSelector(),
                 vol.Optional("bezeichnung"): TextSelector(),
+                vol.Optional("ort"): TextSelector(),
                 vol.Required("spieler"): SelectSelector(
                     SelectSelectorConfig(
                         options=[
@@ -203,6 +204,7 @@ class PokerOptionsFlow(OptionsFlow):
                     time.fromisoformat(k["ende"]) if k.get("ende") else None,
                     k.get("bezeichnung") or "",
                     ergebnisse,
+                    k.get("ort") or "",
                 )
                 return self.async_create_entry(data={})
 

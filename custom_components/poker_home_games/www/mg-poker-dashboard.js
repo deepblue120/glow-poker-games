@@ -12,7 +12,7 @@
  *   # standard_einsatz: 20
  */
 (() => {
-  const VERSION = "1.2.0";
+  const VERSION = "1.3.0";
   const TAG = "mg-poker-dashboard";
 
   const DEFAULTS = {
@@ -201,6 +201,13 @@
     .tbl .mob { display:none; }
     .mehr { margin-top:14px; text-align:center; }
 
+    .f2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+    .btn.rot { color:${C.red}; border-color:${C.red}66; background:${C.red}10; }
+    .aktionen { margin-top:12px; display:flex; justify-content:flex-end; gap:16px; }
+    .link.edit:hover { color:${C.gold}; }
+    .dz { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .ed { font:inherit; cursor:pointer; background:none; border:1px solid transparent; color:${C.muted}; border-radius:8px; width:28px; height:28px; flex:none; font-size:14px; }
+    .ed:hover, .ed:focus-visible { color:${C.gold}; border-color:${C.gold}66; outline:none; }
     .hinweis { font-size:12px; color:${C.muted}; align-self:center; margin-left:4px; }
     .mx { border-collapse:separate; border-spacing:0; width:100%; font-variant-numeric:tabular-nums; color:${C.text}; font-size:13px; font-family:inherit; }
     .mx th, .mx td { padding:7px 8px; white-space:nowrap; text-align:right; border-top:1px solid ${C.tileBorder}; }
@@ -283,6 +290,7 @@
       .platz .roi { display:none; }
       .f4 { grid-template-columns:1fr 1fr; }
       .f4 label:first-child { grid-column:1 / -1; }
+      .f2 { grid-template-columns:1fr; }
       .eing { grid-template-columns:minmax(60px,1fr) 84px 128px; }
       .meta { grid-template-columns:repeat(2,minmax(0,1fr)); }
       .flab { width:100%; }
@@ -310,6 +318,7 @@
       this._listeSort = { key: "datum", ab: true };
       this._listeJahr = "alle";
       this._zeigeEndstand = false;
+      this._listeOrt = "alle";
       this._entityId = null;
     }
 
@@ -360,6 +369,7 @@
         letzter: a.letzter_spieltag || null,
         verlauf: a.verlauf || [],
         spieler: a.spieler_liste || [],
+        orte: a.orte || [],
       };
     }
 
@@ -409,6 +419,8 @@
       else this._beobachteChart(d);
       const del = this._root.querySelector("#loeschen");
       if (del) del.addEventListener("click", () => this._loescheLetzten());
+      const bea = this._root.querySelector("#bearbeiten");
+      if (bea) bea.addEventListener("click", () => { const l = this._daten().letzter; if (l) this._oeffneForm(l); });
     }
 
     _seiteUebersicht(d) {
@@ -459,6 +471,8 @@
       let tage = this._spieltage.slice();
       const jahre = [...new Set(tage.map((t) => t.datum.slice(0, 4)))].sort().reverse();
       if (this._listeJahr !== "alle") tage = tage.filter((t) => t.datum.startsWith(this._listeJahr));
+      const orte = [...new Set(this._spieltage.map((t) => t.ort).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"));
+      if (this._listeOrt !== "alle") tage = tage.filter((t) => (t.ort || "") === this._listeOrt);
 
       const namen = new Map();
       tage.forEach((t) => t.ergebnisse.forEach((e) => namen.set(e.spieler, e.name)));
@@ -504,7 +518,7 @@
 
       const body = zeilen.map((z) => {
         const zeit = z.t.beginn && z.t.ende ? `${z.t.beginn}–${z.t.ende}` : "";
-        const info = [z.t.bezeichnung, zeit].filter(Boolean).join(" · ");
+        const info = [z.t.ort, z.t.bezeichnung, zeit].filter(Boolean).join(" · ");
         const zellen = spieler.map(([id]) => {
           const e = z.m[id];
           if (!e) return felder.map((_, i) => `<td class="${i === 0 ? "grp " : ""}nix">·</td>`).join("");
@@ -516,7 +530,8 @@
             return `<td class="${cls}gew ${sieg ? "sieg" : ""}" style="color:${vz(e.gewinn)}">${eur(e.gewinn).replace(" €", "")}</td>`;
           }).join("");
         }).join("");
-        return `<tr><td class="stk links">${datumDe(z.t.datum)}${info ? `<span class="klein">${esc(info)}</span>` : ""}</td>
+        return `<tr><td class="stk links"><div class="dz"><div>${datumDe(z.t.datum)}${info ? `<span class="klein">${esc(info)}</span>` : ""}</div>
+          <button class="ed" data-edit="${esc(z.t.id)}" aria-label="Spieltag vom ${datumDe(z.t.datum)} bearbeiten" title="Bearbeiten">✎</button></div></td>
           <td><b>${zahl(z.t.topf, 0)} €</b><span class="klein">${z.t.ergebnisse.length} Spieler</span></td>${zellen}</tr>`;
       }).join("");
 
@@ -558,6 +573,10 @@
             ${jahre.map((j) => `<button class="fc ${this._listeJahr === j ? "an" : ""}" data-jahr="${j}">${j}</button>`).join("")}
             <button class="fc ${end ? "an" : ""}" id="endstand" aria-pressed="${end}" style="margin-left:auto">Endstand anzeigen</button>
           </div></div>
+          ${orte.length ? `<div class="frow"><div class="flab">Ort</div><div class="fchips">
+            <button class="fc ${this._listeOrt === "alle" ? "an" : ""}" data-ort="alle">Alle</button>
+            ${orte.map((o) => `<button class="fc ${this._listeOrt === o ? "an" : ""}" data-ort="${esc(o)}">${esc(o)}</button>`).join("")}
+          </div></div>` : ""}
         </div>
         <div class="card">
           <div class="h">Tagesübersicht <small>${n} ${n === 1 ? "Spieltag" : "Spieltage"} · ♛ Abendsieger</small></div>
@@ -578,6 +597,13 @@
       }));
       r.querySelectorAll("[data-jahr]").forEach((b) => b.addEventListener("click", () => {
         this._listeJahr = b.dataset.jahr; this._renderMain();
+      }));
+      r.querySelectorAll("[data-ort]").forEach((b) => b.addEventListener("click", () => {
+        this._listeOrt = b.dataset.ort; this._renderMain();
+      }));
+      r.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => {
+        const tag = (this._spieltage || []).find((t) => t.id === b.dataset.edit);
+        if (tag) this._oeffneForm(tag);
       }));
       const end = r.querySelector("#endstand");
       if (end) end.addEventListener("click", () => { this._zeigeEndstand = !this._zeigeEndstand; this._renderMain(); });
@@ -646,7 +672,7 @@
       const l = d.letzter;
       if (!l) return `<div class="h">Letzter Spieltag</div><div class="leer">Noch kein Spieltag gespeichert.</div>`;
       const zeit = l.beginn && l.ende ? `${l.beginn}–${l.ende} Uhr` : "";
-      const kopf = [datumDe(l.datum), zeit, l.bezeichnung].filter(Boolean).join(" · ");
+      const kopf = [datumDe(l.datum), zeit, l.ort, l.bezeichnung].filter(Boolean).join(" · ");
       const chips = l.ergebnisse.map((e) => {
         const c = vz(e.gewinn);
         return `<div class="erg" style="background:${c}18;border:1px solid ${c}55;color:${c}">${esc(e.name)} <span>${eur(e.gewinn)}</span></div>`;
@@ -659,7 +685,7 @@
           ${this._tile("Dauer", l.dauer_h ? zahl(l.dauer_h, 1) + " h" : "–", zeit || "keine Uhrzeit")}
           ${this._tile("Abendsieger", sieger ? esc(sieger.name) : "–", sieger ? eur(sieger.gewinn) : "")}
         </div>
-        <div style="margin-top:12px;text-align:right"><button class="link" id="loeschen">Letzten Spieltag löschen</button></div>`;
+        <div class="aktionen"><button class="link edit" id="bearbeiten">Bearbeiten</button><button class="link" id="loeschen">Löschen</button></div>`;
     }
 
     _chart(d, W = 640, H = 260) {
@@ -737,17 +763,28 @@
     }
 
     // ------------------------------------------------------------ Eintragen
-    _oeffneForm() {
-      const d = this._daten() || { spieler: [] };
+    _oeffneForm(tag = null) {
+      const d = this._daten() || { spieler: [], orte: [] };
       const jetzt = heute();
       const aktive = d.spieler.filter((s) => s.aktiv !== false);
+      const liste = aktive.map((s) => ({ id: s.id, name: s.name }));
+      if (tag) {
+        tag.ergebnisse.forEach((e) => {
+          if (!liste.some((s) => s.id === e.spieler)) liste.push({ id: e.spieler, name: e.name });
+        });
+        liste.sort((a, b) => a.name.localeCompare(b.name, "de"));
+      }
+      const alsText = (v) => String(Math.round(v * 100) / 100).replace(".", ",");
       const werte = {};
-      aktive.forEach((s) => (werte[s.id] = { e: String(this._config.standard_einsatz), g: "" }));
-      this._form = {
-        datum: jetzt.datum, beginn: "19:00", ende: jetzt.zeit, bez: "",
-        alle: aktive, sel: new Set(aktive.map((s) => s.id)), werte,
-        ignorieren: false, fehler: "", busy: false,
-      };
+      liste.forEach((s) => (werte[s.id] = { e: String(this._config.standard_einsatz), g: "" }));
+      if (tag) tag.ergebnisse.forEach((e) => (werte[e.spieler] = { e: alsText(e.einsatz), g: e.gewinn ? alsText(e.gewinn) : "" }));
+      this._form = tag
+        ? { id: tag.id, datum: tag.datum, beginn: tag.beginn || "", ende: tag.ende || "", bez: tag.bezeichnung || "", ort: tag.ort || "",
+            alle: liste, sel: new Set(tag.ergebnisse.map((e) => e.spieler)), werte, orte: d.orte,
+            ignorieren: false, fehler: "", busy: false }
+        : { id: null, datum: jetzt.datum, beginn: "19:00", ende: jetzt.zeit, bez: "", ort: (d.letzter && d.letzter.ort) || "",
+            alle: liste, sel: new Set(aktive.map((s) => s.id)), werte, orte: d.orte,
+            ignorieren: false, fehler: "", busy: false };
       this._renderForm();
     }
 
@@ -768,14 +805,18 @@
       this._modal.innerHTML = `
         <div class="overlay" id="ov">
           <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dt">
-            <h2 id="dt">Spieltag eintragen</h2>
+            <h2 id="dt">${f.id ? "Spieltag bearbeiten" : "Spieltag eintragen"}</h2>
             <div class="sub">Gewinn = Endstand minus Einsatz. Verluste mit ± negativ machen.</div>
             <div class="f4">
               <label class="fl">Datum<input type="date" id="f-datum" value="${f.datum}"></label>
               <label class="fl">Beginn<input type="time" id="f-beginn" value="${f.beginn}"></label>
               <label class="fl">Ende<input type="time" id="f-ende" value="${f.ende}"></label>
             </div>
-            <label class="fl" style="margin-top:10px">Bezeichnung (optional)<input id="f-bez" value="${esc(f.bez)}" placeholder="z. B. Malle 2027"></label>
+            <div class="f2">
+              <label class="fl">Ort (optional)<input id="f-ort" list="orte-liste" value="${esc(f.ort)}" placeholder="z. B. Bei Marco" autocomplete="off"></label>
+              <label class="fl">Bezeichnung (optional)<input id="f-bez" value="${esc(f.bez)}" placeholder="z. B. Malle 2027"></label>
+            </div>
+            <datalist id="orte-liste">${(f.orte || []).map((o) => `<option value="${esc(o)}"></option>`).join("")}</datalist>
             <div class="sec"><span>Wer war dabei?</span><span>${f.sel.size} ausgewählt</span></div>
             <div class="chips">${chips || '<span class="leer">Keine aktiven Spieler.</span>'}</div>
             ${f.sel.size ? `<div class="sec"><span>Ergebnisse</span></div>
@@ -783,8 +824,9 @@
             <div id="summe"></div>
             <div class="msg" id="msg">${esc(f.fehler)}</div>
             <div class="fuss">
+              ${f.id ? '<button class="btn rot" id="f-loeschen">Löschen</button><span style="flex:1"></span>' : ""}
               <button class="btn" id="abbr">Abbrechen</button>
-              <button class="btn gold" id="speichern" ${f.busy ? "disabled" : ""}>${f.busy ? "Speichert …" : "Spieltag speichern"}</button>
+              <button class="btn gold" id="speichern" ${f.busy ? "disabled" : ""}>${f.busy ? "Speichert …" : f.id ? "Änderungen speichern" : "Spieltag speichern"}</button>
             </div>
           </div>
         </div>`;
@@ -796,6 +838,8 @@
       $("#f-beginn").addEventListener("input", (ev) => (f.beginn = ev.target.value));
       $("#f-ende").addEventListener("input", (ev) => (f.ende = ev.target.value));
       $("#f-bez").addEventListener("input", (ev) => (f.bez = ev.target.value));
+      $("#f-ort").addEventListener("input", (ev) => (f.ort = ev.target.value));
+      if (f.id) $("#f-loeschen").addEventListener("click", () => this._loescheTag(f.id));
       this._modal.querySelectorAll("[data-chip]").forEach((b) => b.addEventListener("click", () => {
         const id = b.dataset.chip;
         f.sel.has(id) ? f.sel.delete(id) : f.sel.add(id);
@@ -857,20 +901,37 @@
       const summe = Math.round(ergebnisse.reduce((a, x) => a + x.gewinn, 0) * 100) / 100;
       if (Math.abs(summe) >= 0.005 && !f.ignorieren) return this._zeigeFehler(`Die Gewinne ergeben ${eur(summe)} statt 0 €. Korrigieren oder „Trotzdem speichern“ anhaken.`);
 
-      const daten = { datum: f.datum, bezeichnung: f.bez.trim(), ergebnisse, summe_ignorieren: !!f.ignorieren };
+      const daten = { datum: f.datum, bezeichnung: f.bez.trim(), ort: f.ort.trim(), ergebnisse, summe_ignorieren: !!f.ignorieren };
+      if (f.id) daten.id = f.id;
       if (f.beginn) daten.beginn = f.beginn;
       if (f.ende) daten.ende = f.ende;
       f.busy = true; f.fehler = "";
       const btn = this._modal.querySelector("#speichern");
       if (btn) { btn.disabled = true; btn.textContent = "Speichert …"; }
       try {
-        await this._hass.callService("poker_home_games", "spieltag_eintragen", daten);
+        await this._hass.callService("poker_home_games", f.id ? "spieltag_bearbeiten" : "spieltag_eintragen", daten);
+        const warBearbeiten = !!f.id;
         this._schliesseForm();
-        this._toast("Spieltag gespeichert");
+        this._toast(warBearbeiten ? "Änderungen gespeichert" : "Spieltag gespeichert");
       } catch (err) {
         f.busy = false;
-        if (btn) { btn.disabled = false; btn.textContent = "Spieltag speichern"; }
+        if (btn) { btn.disabled = false; btn.textContent = f.id ? "Änderungen speichern" : "Spieltag speichern"; }
         this._zeigeFehler((err && err.message) || "Speichern fehlgeschlagen.");
+      }
+    }
+
+    async _loescheTag(id) {
+      const f = this._form;
+      const tag = (this._spieltage || []).find((t) => t.id === id) || ((this._daten() || {}).letzter && this._daten().letzter.id === id ? this._daten().letzter : null);
+      const titel = tag ? `${datumDe(tag.datum)}${tag.bezeichnung ? " (" + tag.bezeichnung + ")" : ""}` : "";
+      if (!window.confirm(`Spieltag ${titel} wirklich löschen?\n\nDas lässt sich nicht rückgängig machen.`)) return;
+      try {
+        await this._hass.callService("poker_home_games", "spieltag_loeschen", { id });
+        if (f && f.id === id) this._schliesseForm();
+        this._toast("Spieltag gelöscht");
+      } catch (err) {
+        if (f) this._zeigeFehler((err && err.message) || "Löschen fehlgeschlagen.");
+        else window.alert((err && err.message) || "Löschen fehlgeschlagen.");
       }
     }
 

@@ -13,6 +13,9 @@ spieltag_eintragen:
     bezeichnung:
       selector:
         text:
+    ort:
+      selector:
+        text:
     ergebnisse:
       required: true
       example: '[{"spieler": "Christian", "einsatz": 40, "gewinn": 25.5}, {"spieler": "Jan", "einsatz": 40, "gewinn": -25.5}]'
@@ -26,3 +29,41 @@ spieltag_eintragen:
 letzten_spieltag_loeschen:
 
 spieltage_abrufen:
+
+spieltag_bearbeiten:
+  fields:
+    id:
+      required: true
+      selector:
+        text:
+    datum:
+      required: true
+      selector:
+        date:
+    beginn:
+      selector:
+        time:
+    ende:
+      selector:
+        time:
+    bezeichnung:
+      selector:
+        text:
+    ort:
+      selector:
+        text:
+    ergebnisse:
+      required: true
+      selector:
+        object:
+    summe_ignorieren:
+      default: false
+      selector:
+        boolean:
+
+spieltag_loeschen:
+  fields:
+    id:
+      required: true
+      selector:
+        text:

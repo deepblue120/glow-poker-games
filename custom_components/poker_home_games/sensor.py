@@ -62,7 +62,7 @@ class PokerRanglisteSensor(_PokerSensor):
     _attr_native_unit_of_measurement = "Spieltage"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _unrecorded_attributes = frozenset(
-        {"rangliste", "letzter_spieltag", "verlauf", "spieler_liste"}
+        {"rangliste", "letzter_spieltag", "verlauf", "spieler_liste", "orte"}
     )
 
     def __init__(self, entry: PokerConfigEntry, data: PokerData) -> None:
@@ -80,6 +80,7 @@ class PokerRanglisteSensor(_PokerSensor):
             "letzter_spieltag": st["letzter_spieltag"],
             "verlauf": st["verlauf"],
             "spieler_liste": st["spieler_liste"],
+            "orte": st["orte"],
         }
 
 

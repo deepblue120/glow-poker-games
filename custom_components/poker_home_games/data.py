@@ -16,6 +16,7 @@ from homeassistant.util import slugify
 from .const import (
     CSV_EXPORT,
     DOMAIN,
+    EVENT_SPIELTAG_GEAENDERT,
     EVENT_SPIELTAG_GESPEICHERT,
     SIGNAL_UPDATE,
     STORAGE_VERSION,
@@ -83,7 +84,7 @@ class PokerData:
         ) as datei:
             writer = csv.writer(datei, delimiter=";")
             writer.writerow(
-                ["Datum", "Beginn", "Ende", "Dauer (h)", "Bezeichnung",
+                ["Datum", "Beginn", "Ende", "Dauer (h)", "Bezeichnung", "Ort",
                  "Spieler", "Einsatz", "Endstand", "Gewinn"]
             )
             for tag in spieltage:
@@ -93,7 +94,8 @@ class PokerData:
                     writer.writerow(
                         [
                             tag["datum"], tag.get("beginn") or "", tag.get("ende") or "",
-                            zahl(dauer), tag.get("bezeichnung") or "", name,
+                            zahl(dauer), tag.get("bezeichnung") or "",
+                            tag.get("ort") or "", name,
                             zahl(erg["einsatz"]), zahl(erg["einsatz"] + erg["gewinn"]),
                             zahl(erg["gewinn"]),
                         ]
@@ -142,23 +144,69 @@ class PokerData:
         ende: time | None,
         bezeichnung: str,
         ergebnisse: list[tuple[str, float, float]],
+        ort: str = "",
     ) -> dict[str, Any]:
         """Spieltag anlegen, speichern und Event auslösen."""
-        spieltag = {
-            "id": uuid.uuid4().hex,
+        spieltag = {"id": uuid.uuid4().hex}
+        spieltag.update(
+            self._felder(datum, beginn, ende, bezeichnung, ort, ergebnisse)
+        )
+        self.spieltage.append(spieltag)
+        await self.async_save()
+        info = self.spieltag_info(spieltag)
+        self.hass.bus.async_fire(EVENT_SPIELTAG_GESPEICHERT, info)
+        return info
+
+    @staticmethod
+    def _felder(
+        datum: date,
+        beginn: time | None,
+        ende: time | None,
+        bezeichnung: str,
+        ort: str,
+        ergebnisse: list[tuple[str, float, float]],
+    ) -> dict[str, Any]:
+        return {
             "datum": datum.isoformat(),
             "beginn": beginn.strftime("%H:%M") if beginn else None,
             "ende": ende.strftime("%H:%M") if ende else None,
             "bezeichnung": (bezeichnung or "").strip(),
+            "ort": (ort or "").strip(),
             "ergebnisse": [
                 {"spieler": pid, "einsatz": _r(einsatz), "gewinn": _r(gewinn)}
                 for pid, einsatz, gewinn in ergebnisse
             ],
         }
-        self.spieltage.append(spieltag)
+
+    def _finde(self, spieltag_id: str) -> dict[str, Any]:
+        for tag in self.spieltage:
+            if tag["id"] == spieltag_id:
+                return tag
+        raise KeyError(spieltag_id)
+
+    async def async_spieltag_aendern(
+        self,
+        spieltag_id: str,
+        datum: date,
+        beginn: time | None,
+        ende: time | None,
+        bezeichnung: str,
+        ergebnisse: list[tuple[str, float, float]],
+        ort: str = "",
+    ) -> dict[str, Any]:
+        """Vorhandenen Spieltag komplett ersetzen (ID bleibt)."""
+        tag = self._finde(spieltag_id)
+        tag.update(self._felder(datum, beginn, ende, bezeichnung, ort, ergebnisse))
         await self.async_save()
-        info = self.spieltag_info(spieltag)
-        self.hass.bus.async_fire(EVENT_SPIELTAG_GESPEICHERT, info)
+        info = self.spieltag_info(tag)
+        self.hass.bus.async_fire(EVENT_SPIELTAG_GEAENDERT, info)
+        return info
+
+    async def async_spieltag_loeschen(self, spieltag_id: str) -> dict[str, Any]:
+        tag = self._finde(spieltag_id)
+        info = self.spieltag_info(tag)
+        self.spieltage = [t for t in self.spieltage if t["id"] != spieltag_id]
+        await self.async_save()
         return info
 
     def letzter_spieltag(self) -> dict[str, Any] | None:
@@ -194,6 +242,7 @@ class PokerData:
             "ende": tag.get("ende"),
             "dauer_h": dauer_stunden(tag),
             "bezeichnung": tag.get("bezeichnung") or "",
+            "ort": tag.get("ort") or "",
             "topf": _r(sum(e["einsatz"] for e in tag["ergebnisse"])),
             "ergebnisse": ergebnisse,
         }
@@ -271,12 +320,22 @@ class PokerData:
             "stunden_gesamt": _r(stunden_gesamt),
             "letzter_spieltag": self.spieltag_info(tage[-1]) if tage else None,
             "verlauf": verlauf,
+            "orte": self._orte(tage),
             "spieler_liste": [
                 {"id": pid, "name": sp["name"], "aktiv": sp.get("aktiv", True)}
                 for pid, sp in sorted(self.spieler.items(), key=lambda x: x[1]["name"])
             ],
         }
         return self._statistik
+
+    @staticmethod
+    def _orte(tage: list[dict[str, Any]]) -> list[str]:
+        """Bisher verwendete Orte, häufigste zuerst."""
+        zaehler: dict[str, int] = {}
+        for tag in tage:
+            if ort := (tag.get("ort") or "").strip():
+                zaehler[ort] = zaehler.get(ort, 0) + 1
+        return sorted(zaehler, key=lambda o: (-zaehler[o], o.casefold()))
 
     # ------------------------------------------------------------ Import
     @staticmethod
@@ -318,6 +377,7 @@ class PokerData:
                         {
                             "_key": schluessel, "datum": datum.isoformat(),
                             "bezeichnung": bez,
+                            "ort": (zeile.get("ort") or "").strip(),
                             "beginn": (zeile.get("beginn") or "").strip()[:5] or None,
                             "ende": (zeile.get("ende") or "").strip()[:5] or None,
                             "ergebnisse": [],
@@ -344,6 +404,7 @@ class PokerData:
                 {
                     "id": uuid.uuid4().hex, "datum": tag["datum"],
                     "beginn": tag["beginn"], "ende": tag["ende"],
-                    "bezeichnung": tag["bezeichnung"], "ergebnisse": ergebnisse,
+                    "bezeichnung": tag["bezeichnung"], "ort": tag.get("ort", ""),
+                    "ergebnisse": ergebnisse,
                 }
             )
