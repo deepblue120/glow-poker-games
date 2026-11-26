@@ -1,0 +1,84 @@
+# Glow Poker Games
+
+Home-Assistant-Integration für die Ergebnisse von Poker-Home-Games – mit eigener Dashboard-Karte im Glow-Stil.
+
+- Spieltage mit Datum, Beginn, Ende, Bezeichnung und Ergebnissen pro Spieler erfassen
+- Ewige Tabelle mit Gewinn, Ø pro Spieltag, ROI, Gewinnquote und Gewinn pro Stunde
+- Podium, letzter Spieltag, Verlaufsgraph und Rekorde in einer Panel-Karte
+- Prüfung, dass die Gewinne eines Abends zusammen 0 € ergeben
+- Import bestehender Ergebnisse aus CSV, automatischer Excel-Export nach jeder Änderung
+
+## Installation
+
+### Über HACS (empfohlen)
+
+1. HACS → ⋮ → **Benutzerdefinierte Repositories** → `https://github.com/deepblue120/glow-poker-games`, Typ **Integration**
+2. „Glow Poker Games“ installieren und Home Assistant neu starten
+3. Einstellungen → Geräte & Dienste → **Integration hinzufügen** → „Poker Home Games“
+
+### Manuell
+
+Den Ordner `custom_components/poker_home_games` nach `/config/custom_components/` kopieren und Home Assistant neu starten.
+
+## Einrichtung
+
+Beim Hinzufügen fragt die Integration nach
+
+- **CSV-Datei für den Import** (optional): bisherige Ergebnisse, siehe [Beispiel](beispiel/poker_import_beispiel.csv)
+- **Spieler** (optional, kommagetrennt), falls ohne Import gestartet wird
+
+CSV-Format (Semikolon getrennt, Dezimalpunkt oder -komma):
+
+```
+datum;bezeichnung;spieler;einsatz;endstand;gewinn
+2026-01-17;;anna;40;72.5;32.5
+```
+
+Optionale Spalten: `beginn`, `ende` (HH:MM), `name` (Anzeigename). Fehlt `gewinn`, wird er aus `endstand − einsatz` berechnet. Aufeinanderfolgende Zeilen mit gleichem Datum und gleicher Bezeichnung bilden einen Spieltag.
+
+## Dashboard-Karte
+
+Die Karte wird von der Integration automatisch mitgeladen – ein Ressourcen-Eintrag ist nicht nötig. Neue Ansicht vom Typ **Panel** anlegen und als Karte eintragen:
+
+```yaml
+type: custom:mg-poker-dashboard
+# optional:
+# title: Pokerrunde
+# standard_einsatz: 20
+# entity: sensor.poker_home_games_rangliste
+```
+
+Über **Spieltag eintragen** öffnet sich direkt in der Karte ein Dialog für Datum, Uhrzeiten, Teilnehmer, Einsatz und Gewinn. Der ±-Knopf neben dem Gewinnfeld macht Verluste negativ (praktisch auf dem Handy). Ein Fehleintrag lässt sich unter „Letzter Spieltag“ löschen.
+
+## Weitere Wege zum Eintragen
+
+- **Einstellungen → Geräte & Dienste → Poker Home Games → Konfigurieren**: Spieltag eintragen, Spieler hinzufügen, aktive Spieler festlegen, letzten Spieltag löschen
+- **Aktion** `poker_home_games.spieltag_eintragen`:
+
+```yaml
+action: poker_home_games.spieltag_eintragen
+data:
+  datum: "2026-11-21"
+  beginn: "19:30"
+  ende: "01:00"
+  ergebnisse:
+    - {spieler: Anna, einsatz: 40, gewinn: 30}
+    - {spieler: Ben, einsatz: 40, gewinn: -20}
+    - {spieler: Chris, einsatz: 20, gewinn: -10}
+```
+
+- **Aktion** `poker_home_games.letzten_spieltag_loeschen`
+
+## Entitäten
+
+| Entität | Zustand | Attribute |
+|---|---|---|
+| `sensor.poker_home_games_rangliste` | Anzahl Spieltage | `rangliste`, `letzter_spieltag`, `verlauf`, `spieler_liste`, `teilnahmen`, `einsatz_gesamt`, `stunden_gesamt` |
+| `sensor.poker_home_games_<spieler>` | Gesamtgewinn in € | `einsatz`, `endstand`, `spiele`, `plus`, `minus`, `gewinn_avg`, `roi`, `quote`, `stunden`, `gewinn_pro_stunde`, `bester_spieltag`, `schlechtester_spieltag`, `platz` |
+
+Nach jedem Speichern wird das Event `poker_home_games_spieltag_gespeichert` ausgelöst – z. B. um automatisch eine Nachricht an die Runde zu schicken.
+
+## Daten
+
+- Datenbestand: `/config/.storage/poker_home_games.<entry_id>` (Teil des normalen HA-Backups)
+- Excel-Export: `/config/poker_spieltage.csv` (Semikolon, Dezimalkomma), wird nach jeder Änderung neu geschrieben
