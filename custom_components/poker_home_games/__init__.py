@@ -44,7 +44,7 @@ from .data import PokerData, fmt_eur
 
 KARTE_URL = "/poker_home_games/mg-poker-dashboard.js"
 KARTE_DATEI = Path(__file__).parent / "www" / "mg-poker-dashboard.js"
-KARTE_VERSION = "1.10.2"
+KARTE_VERSION = "1.11.0"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -61,7 +61,18 @@ SPIELTAG_SCHEMA = vol.Schema(
         vol.Optional("bezeichnung", default=""): cv.string,
         vol.Optional("ort", default=""): cv.string,
         vol.Optional("blinds", default=""): cv.string,
-        vol.Required("ergebnisse"): vol.All(
+        vol.Optional("ende_datum"): cv.date,
+        vol.Optional("tage"): vol.All(cv.ensure_list, [vol.Schema({
+            vol.Required("datum"): cv.date,
+            vol.Optional("beginn"): vol.Any(None, cv.time),
+            vol.Optional("ende"): vol.Any(None, cv.time),
+            vol.Required("ergebnisse"): vol.All(cv.ensure_list, [vol.Schema({
+                vol.Required("spieler"): cv.string,
+                vol.Required("einsatz"): vol.All(vol.Coerce(float), vol.Range(min=0.01)),
+                vol.Required("gewinn"): vol.Coerce(float),
+            })]),
+        })]),
+        vol.Optional("ergebnisse"): vol.All(
             cv.ensure_list,
             [
                 vol.Schema(
@@ -84,6 +95,7 @@ LOESCHEN_SCHEMA = vol.Schema({vol.Required("id"): cv.string})
 SESSION_SCHEMA = vol.Schema(
     {
         vol.Required("datum"): cv.date,
+        vol.Optional("ende_datum"): cv.date,
         vol.Optional("beginn"): cv.time,
         vol.Optional("ende"): cv.time,
         vol.Optional("art", default="casino"): vol.In(SESSION_ARTEN),
@@ -99,8 +111,67 @@ SESSION_BEARBEITEN_SCHEMA = SESSION_SCHEMA.extend({vol.Required("id"): cv.string
 
 
 def _pruefe_session(daten: dict) -> None:
+    if daten.get("ende_datum") and daten["ende_datum"] < daten["datum"]:
+        raise ServiceValidationError("Das Enddatum liegt vor dem Startdatum")
     if daten["gewinn"] < -daten["einsatz"]:
         raise ServiceValidationError("Verlust größer als Einsatz")
+
+
+def _pruefe_liste(
+    data: PokerData, liste: list[dict], tag: str = ""
+) -> list[tuple[str, float, float]]:
+    vor = f"{tag}: " if tag else ""
+    ergebnisse: list[tuple[str, float, float]] = []
+    for erg in liste:
+        pid = data.spieler_id(erg["spieler"])
+        if pid is None:
+            raise ServiceValidationError(f"{vor}Unbekannter Spieler: {erg['spieler']}")
+        if any(pid == e[0] for e in ergebnisse):
+            raise ServiceValidationError(f"{vor}Spieler doppelt: {erg['spieler']}")
+        if erg["gewinn"] < -erg["einsatz"]:
+            raise ServiceValidationError(f"{vor}{erg['spieler']}: Verlust größer als Einsatz")
+        ergebnisse.append((pid, erg["einsatz"], erg["gewinn"]))
+    return ergebnisse
+
+
+def _pruefe_spieltag(data: PokerData, call_data: dict) -> tuple[list, list | None]:
+    """Gesamt- oder Tagesergebnisse prüfen; liefert (ergebnisse, tage)."""
+    datum, ende_datum = call_data["datum"], call_data.get("ende_datum")
+    if ende_datum and ende_datum < datum:
+        raise ServiceValidationError("Das Enddatum liegt vor dem Startdatum")
+    tage = None
+    if call_data.get("tage"):
+        tage = []
+        gesehen = set()
+        for t in call_data["tage"]:
+            if t["datum"] < datum or (ende_datum and t["datum"] > ende_datum):
+                raise ServiceValidationError(f"{t['datum']}: liegt außerhalb des Zeitraums")
+            if t["datum"] in gesehen:
+                raise ServiceValidationError(f"{t['datum']}: Tag doppelt")
+            gesehen.add(t["datum"])
+            if not t["ergebnisse"]:
+                continue
+            tage.append({"datum": t["datum"], "beginn": t.get("beginn"), "ende": t.get("ende"),
+                         "ergebnisse": _pruefe_liste(data, t["ergebnisse"], t["datum"].strftime("%d.%m."))})
+        if not tage:
+            raise ServiceValidationError("Kein Tag enthält Ergebnisse")
+        summen: dict[str, float] = {}
+        for t in tage:
+            for pid, _e, g in t["ergebnisse"]:
+                summen[pid] = summen.get(pid, 0.0) + g
+        summe = round(sum(summen.values()), 2)
+        ergebnisse: list = []
+    elif call_data.get("ergebnisse"):
+        ergebnisse = _pruefe_liste(data, call_data["ergebnisse"])
+        summe = round(sum(e[2] for e in ergebnisse), 2)
+    else:
+        raise ServiceValidationError("Bitte ergebnisse oder tage angeben")
+    if abs(summe) > 0.009 and not call_data["summe_ignorieren"]:
+        raise ServiceValidationError(
+            f"Die Gewinne ergeben {fmt_eur(summe)} € statt 0 € "
+            "(mit summe_ignorieren: true trotzdem speichern)"
+        )
+    return ergebnisse, tage
 
 
 def _pruefe_ergebnisse(
@@ -144,22 +215,22 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
     async def spieltag_eintragen(call: ServiceCall) -> ServiceResponse:
         data = _poker_data(hass)
-        ergebnisse = _pruefe_ergebnisse(data, call.data)
+        ergebnisse, tage = _pruefe_spieltag(data, call.data)
         info = await data.async_spieltag_speichern(
             call.data["datum"], call.data.get("beginn"), call.data.get("ende"),
             call.data["bezeichnung"], ergebnisse, call.data["ort"],
-            call.data["blinds"],
+            call.data["blinds"], call.data.get("ende_datum"), tage,
         )
         return info if call.return_response else None
 
     async def spieltag_bearbeiten(call: ServiceCall) -> ServiceResponse:
         data = _poker_data(hass)
-        ergebnisse = _pruefe_ergebnisse(data, call.data)
+        ergebnisse, tage = _pruefe_spieltag(data, call.data)
         try:
             info = await data.async_spieltag_aendern(
                 call.data["id"], call.data["datum"], call.data.get("beginn"),
                 call.data.get("ende"), call.data["bezeichnung"], ergebnisse,
-                call.data["ort"], call.data["blinds"],
+                call.data["ort"], call.data["blinds"], call.data.get("ende_datum"), tage,
             )
         except KeyError as err:
             raise ServiceValidationError("Spieltag nicht gefunden") from err

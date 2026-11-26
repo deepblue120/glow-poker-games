@@ -10,6 +10,7 @@ Home-Assistant-Integration für die Ergebnisse von Poker-Home-Games – mit eige
 - Übersicht passt im Browser komplett auf einen Bildschirm (ideal für Screenshots)
 - Podium umschaltbar: Gesamt, Ø pro Spiel (ab 5 Spielen) oder nach Spielort
 - Uhrzeiten für viele Spieltage auf einmal nachtragen (in „Alle Spiele“, mit Vorlage für alle leeren Felder)
+- Mehrtägige Spieltage (z. B. Trips): Enddatum und optional Tagesergebnisse je Tag; das Gesamtergebnis wird daraus berechnet, in „Alle Spiele“ lassen sich die Tage aufklappen
 - Spiele über Mitternacht: Endzeit vor Startzeit = Ende am Folgetag (wird im Dialog angezeigt, in Listen mit „+1“)
 - Zweite Seite „Alle Spiele“ als Tagesübersicht wie in Excel: eine Zeile pro Spieltag, pro Spieler Einsatz, Gewinn und optional Endstand, Summenzeile; sortierbar nach Datum, höchstem Gewinn/Verlust, Gesamteinsatz oder per Klick auf jede Spielerspalte; Filter nach Jahr
 - Prüfung, dass die Gewinne eines Abends zusammen 0 € ergeben
@@ -79,6 +80,7 @@ data:
     - {spieler: Chris, einsatz: 20, gewinn: -10}
 ```
 
+- Mehrere Tage: zusätzlich `ende_datum` und statt `ergebnisse` optional `tage` (Liste mit `datum`, `beginn`, `ende`, `ergebnisse`)
 - **Aktion** `poker_home_games.spieltag_bearbeiten` – wie `spieltag_eintragen`, zusätzlich mit `id`; ersetzt den Spieltag komplett
 - **Aktion** `poker_home_games.spieltag_loeschen` – löscht den Spieltag mit der angegebenen `id`
 - **Aktion** `poker_home_games.letzten_spieltag_loeschen`

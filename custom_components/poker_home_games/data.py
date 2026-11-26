@@ -35,12 +35,25 @@ def fmt_eur(wert: float) -> str:
 
 
 def dauer_stunden(spieltag: dict[str, Any]) -> float | None:
-    """Spieldauer in Stunden, Ende nach Mitternacht wird berücksichtigt."""
+    """Spieldauer in Stunden.
+
+    Mit Tagesergebnissen: Summe der Tageszeiten. Mit Enddatum: echte Zeitspanne
+    (nur bis 36 h, sonst unbestimmt). Ohne Enddatum: Ende vor Beginn = Folgetag.
+    """
+    tage = spieltag.get("tage") or []
+    if tage:
+        werte = [w for w in (dauer_stunden(t) for t in tage) if w]
+        return round(sum(werte), 2) if werte else None
     beginn, ende = spieltag.get("beginn"), spieltag.get("ende")
     if not beginn or not ende:
         return None
-    b = datetime.combine(date.min, time.fromisoformat(beginn))
-    e = datetime.combine(date.min, time.fromisoformat(ende))
+    start_tag = date.fromisoformat(spieltag["datum"]) if spieltag.get("datum") else date.min
+    b = datetime.combine(start_tag, time.fromisoformat(beginn))
+    if spieltag.get("ende_datum") and spieltag.get("datum"):
+        e = datetime.combine(date.fromisoformat(spieltag["ende_datum"]), time.fromisoformat(ende))
+        stunden = (e - b).total_seconds() / 3600
+        return round(stunden, 2) if 0 < stunden <= 36 else None
+    e = datetime.combine(start_tag, time.fromisoformat(ende))
     if e <= b:
         e += timedelta(days=1)
     return round((e - b).total_seconds() / 3600, 2)
@@ -169,11 +182,14 @@ class PokerData:
         ergebnisse: list[tuple[str, float, float]],
         ort: str = "",
         blinds: str = "",
+        ende_datum: date | None = None,
+        tage: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Spieltag anlegen, speichern und Event auslösen."""
         spieltag = {"id": uuid.uuid4().hex}
         spieltag.update(
-            self._felder(datum, beginn, ende, bezeichnung, ort, ergebnisse, blinds)
+            self._felder(datum, beginn, ende, bezeichnung, ort, ergebnisse, blinds,
+                         ende_datum, tage)
         )
         self.spieltage.append(spieltag)
         await self.async_save()
@@ -190,18 +206,46 @@ class PokerData:
         ort: str,
         ergebnisse: list[tuple[str, float, float]],
         blinds: str = "",
+        ende_datum: date | None = None,
+        tage: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        def zeit(t: time | None) -> str | None:
+            return t.strftime("%H:%M") if t else None
+
+        def liste(erg: list[tuple[str, float, float]]) -> list[dict[str, Any]]:
+            return [
+                {"spieler": pid, "einsatz": _r(einsatz), "gewinn": _r(gewinn)}
+                for pid, einsatz, gewinn in erg
+            ]
+
+        tage_daten = [
+            {"datum": t["datum"].isoformat(), "beginn": zeit(t.get("beginn")),
+             "ende": zeit(t.get("ende")), "ergebnisse": liste(t["ergebnisse"])}
+            for t in sorted(tage or [], key=lambda t: t["datum"])
+        ]
+        if tage_daten:
+            # Gesamtergebnis aus den Tagen zusammenrechnen
+            summen: dict[str, list[float]] = {}
+            for t in tage_daten:
+                for e in t["ergebnisse"]:
+                    s = summen.setdefault(e["spieler"], [0.0, 0.0])
+                    s[0] += e["einsatz"]
+                    s[1] += e["gewinn"]
+            ergebnisse = [(pid, s[0], s[1]) for pid, s in summen.items()]
+            if ende_datum is None:
+                ende_datum = date.fromisoformat(tage_daten[-1]["datum"])
+        if ende_datum is not None and ende_datum <= datum:
+            ende_datum = None
         return {
             "blinds": (blinds or "").strip(),
             "datum": datum.isoformat(),
-            "beginn": beginn.strftime("%H:%M") if beginn else None,
-            "ende": ende.strftime("%H:%M") if ende else None,
+            "ende_datum": ende_datum.isoformat() if ende_datum else None,
+            "beginn": zeit(beginn),
+            "ende": zeit(ende),
             "bezeichnung": (bezeichnung or "").strip(),
             "ort": (ort or "").strip(),
-            "ergebnisse": [
-                {"spieler": pid, "einsatz": _r(einsatz), "gewinn": _r(gewinn)}
-                for pid, einsatz, gewinn in ergebnisse
-            ],
+            "ergebnisse": liste(ergebnisse),
+            "tage": tage_daten,
         }
 
     def _finde(self, spieltag_id: str) -> dict[str, Any]:
@@ -220,11 +264,14 @@ class PokerData:
         ergebnisse: list[tuple[str, float, float]],
         ort: str = "",
         blinds: str = "",
+        ende_datum: date | None = None,
+        tage: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """Vorhandenen Spieltag komplett ersetzen (ID bleibt)."""
         tag = self._finde(spieltag_id)
         tag.update(
-            self._felder(datum, beginn, ende, bezeichnung, ort, ergebnisse, blinds)
+            self._felder(datum, beginn, ende, bezeichnung, ort, ergebnisse, blinds,
+                         ende_datum, tage)
         )
         await self.async_save()
         info = self.spieltag_info(tag)
@@ -264,8 +311,8 @@ class PokerData:
         await self.async_save()
         return self.spieltag_info(letzter)
 
-    def spieltag_info(self, tag: dict[str, Any]) -> dict[str, Any]:
-        ergebnisse = sorted(
+    def _erg_info(self, liste: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return sorted(
             (
                 {
                     "spieler": e["spieler"],
@@ -274,13 +321,24 @@ class PokerData:
                     "endstand": _r(e["einsatz"] + e["gewinn"]),
                     "gewinn": e["gewinn"],
                 }
-                for e in tag["ergebnisse"]
+                for e in liste
             ),
             key=lambda e: -e["gewinn"],
         )
+
+    def spieltag_info(self, tag: dict[str, Any]) -> dict[str, Any]:
+        ergebnisse = self._erg_info(tag["ergebnisse"])
         return {
             "id": tag["id"],
             "datum": tag["datum"],
+            "ende_datum": tag.get("ende_datum"),
+            "tage": [
+                {"datum": t["datum"], "beginn": t.get("beginn"), "ende": t.get("ende"),
+                 "dauer_h": dauer_stunden(t),
+                 "topf": _r(sum(e["einsatz"] for e in t["ergebnisse"])),
+                 "ergebnisse": self._erg_info(t["ergebnisse"])}
+                for t in tag.get("tage") or []
+            ],
             "beginn": tag.get("beginn"),
             "ende": tag.get("ende"),
             "dauer_h": dauer_stunden(tag),
@@ -405,8 +463,12 @@ class PokerData:
     @staticmethod
     def _session_felder(daten: dict[str, Any]) -> dict[str, Any]:
         beginn, ende = daten.get("beginn"), daten.get("ende")
+        ende_datum = daten.get("ende_datum")
+        if ende_datum is not None and ende_datum <= daten["datum"]:
+            ende_datum = None
         return {
             "datum": daten["datum"].isoformat(),
+            "ende_datum": ende_datum.isoformat() if ende_datum else None,
             "beginn": beginn.strftime("%H:%M") if beginn else None,
             "ende": ende.strftime("%H:%M") if ende else None,
             "art": daten.get("art") or "casino",

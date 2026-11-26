@@ -41,7 +41,8 @@
           "bezeichnung": "Bezeichnung (optional, z. B. Malle)",
           "spieler": "Spieler",
           "ort": "Ort (optional)",
-          "blinds": "Blinds (optional, z. B. 0,10/0,20)"
+          "blinds": "Blinds (optional, z. B. 0,10/0,20)",
+          "ende_datum": "Enddatum (optional, bei mehreren Tagen)"
         }
       },
       "ergebnisse": {
@@ -108,7 +109,7 @@
         },
         "ergebnisse": {
           "name": "Ergebnisse",
-          "description": "Liste mit spieler, einsatz und gewinn je Spieler."
+          "description": "Gesamtergebnis: Liste mit spieler, einsatz und gewinn (entfällt bei Tagesergebnissen)."
         },
         "summe_ignorieren": {
           "name": "Summe ignorieren",
@@ -121,6 +122,14 @@
         "blinds": {
           "name": "Blinds",
           "description": "Gespielte Blinds, z. B. 0,10/0,20 (optional)."
+        },
+        "ende_datum": {
+          "name": "Enddatum",
+          "description": "Nur nötig, wenn über mehrere Tage gespielt wurde (Ende vor Beginn ohne Enddatum = Folgetag)."
+        },
+        "tage": {
+          "name": "Tagesergebnisse",
+          "description": "Optional: Liste mit datum, beginn, ende und ergebnisse je Tag. Das Gesamtergebnis wird daraus berechnet."
         }
       }
     },
@@ -158,7 +167,7 @@
         },
         "ergebnisse": {
           "name": "Ergebnisse",
-          "description": "Liste mit spieler, einsatz und gewinn je Spieler."
+          "description": "Gesamtergebnis: Liste mit spieler, einsatz und gewinn (entfällt bei Tagesergebnissen)."
         },
         "summe_ignorieren": {
           "name": "Summe ignorieren",
@@ -171,6 +180,14 @@
         "blinds": {
           "name": "Blinds",
           "description": "Gespielte Blinds, z. B. 0,10/0,20 (optional)."
+        },
+        "ende_datum": {
+          "name": "Enddatum",
+          "description": "Nur nötig, wenn über mehrere Tage gespielt wurde (Ende vor Beginn ohne Enddatum = Folgetag)."
+        },
+        "tage": {
+          "name": "Tagesergebnisse",
+          "description": "Optional: Liste mit datum, beginn, ende und ergebnisse je Tag. Das Gesamtergebnis wird daraus berechnet."
         }
       }
     },
@@ -227,6 +244,10 @@
         "notiz": {
           "name": "Notiz",
           "description": "Freitext (optional)."
+        },
+        "ende_datum": {
+          "name": "Enddatum",
+          "description": "Nur nötig, wenn über mehrere Tage gespielt wurde (Ende vor Beginn ohne Enddatum = Folgetag)."
         }
       }
     },
@@ -277,6 +298,10 @@
         "notiz": {
           "name": "Notiz",
           "description": "Freitext (optional)."
+        },
+        "ende_datum": {
+          "name": "Enddatum",
+          "description": "Nur nötig, wenn über mehrere Tage gespielt wurde (Ende vor Beginn ohne Enddatum = Folgetag)."
         }
       }
     },

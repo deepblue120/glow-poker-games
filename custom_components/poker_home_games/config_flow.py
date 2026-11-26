@@ -141,6 +141,7 @@ class PokerOptionsFlow(OptionsFlow):
         schema = vol.Schema(
             {
                 vol.Required("datum"): DateSelector(),
+                vol.Optional("ende_datum"): DateSelector(),
                 vol.Optional("beginn"): TimeSelector(),
                 vol.Optional("ende"): TimeSelector(),
                 vol.Optional("bezeichnung"): TextSelector(),
@@ -207,6 +208,7 @@ class PokerOptionsFlow(OptionsFlow):
                     ergebnisse,
                     k.get("ort") or "",
                     k.get("blinds") or "",
+                    date.fromisoformat(k["ende_datum"]) if k.get("ende_datum") else None,
                 )
                 return self.async_create_entry(data={})
 

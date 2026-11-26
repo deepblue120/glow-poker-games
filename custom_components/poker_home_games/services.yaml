@@ -4,6 +4,9 @@ spieltag_eintragen:
       required: true
       selector:
         date:
+    ende_datum:
+      selector:
+        date:
     beginn:
       selector:
         time:
@@ -20,8 +23,11 @@ spieltag_eintragen:
       selector:
         text:
     ergebnisse:
-      required: true
       example: '[{"spieler": "Christian", "einsatz": 40, "gewinn": 25.5}, {"spieler": "Jan", "einsatz": 40, "gewinn": -25.5}]'
+      selector:
+        object:
+    tage:
+      example: '[{"datum": "2026-10-01", "beginn": "20:00", "ende": "02:00", "ergebnisse": [{"spieler": "Christian", "einsatz": 40, "gewinn": 10}, {"spieler": "Jan", "einsatz": 40, "gewinn": -10}]}]'
       selector:
         object:
     summe_ignorieren:
@@ -43,6 +49,9 @@ spieltag_bearbeiten:
       required: true
       selector:
         date:
+    ende_datum:
+      selector:
+        date:
     beginn:
       selector:
         time:
@@ -59,7 +68,9 @@ spieltag_bearbeiten:
       selector:
         text:
     ergebnisse:
-      required: true
+      selector:
+        object:
+    tage:
       selector:
         object:
     summe_ignorieren:
@@ -78,6 +89,9 @@ session_eintragen:
   fields:
     datum:
       required: true
+      selector:
+        date:
+    ende_datum:
       selector:
         date:
     beginn:
@@ -135,6 +149,9 @@ session_bearbeiten:
         text:
     datum:
       required: true
+      selector:
+        date:
+    ende_datum:
       selector:
         date:
     beginn:

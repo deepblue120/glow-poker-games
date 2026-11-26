@@ -14,7 +14,7 @@
  *   # ich_titel: Meine Spiele
  */
 (() => {
-  const VERSION = "1.9.1";
+  const VERSION = "1.10.0";
   const TAG = "mg-poker-dashboard";
 
   const DEFAULTS = {
@@ -72,6 +72,20 @@
       ende = ` (${WT[d.getDay()]} ${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()})`;
     }
     return `<b>Ende am Folgetag${ende}</b> · Dauer ${dauer}`;
+  };
+  const isoPlus = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+  const tageZwischen = (von, bis) => Math.round((new Date(bis + "T12:00:00") - new Date(von + "T12:00:00")) / 86400000);
+  const tagKurz = (iso) => { const d = new Date(iso + "T12:00:00"); return `${WT[d.getDay()]} ${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.`; };
+  const datumBereich = (von, bis) => (bis && bis > von ? `${datumDe(von).slice(0, 6)}–${datumDe(bis)}` : datumDe(von));
+  const zeitHinweis = (datum, endeDatum, b, e) => {
+    if (!(datum && endeDatum && endeDatum > datum)) return mitternachtHinweis(datum, b, e);
+    const n = tageZwischen(datum, endeDatum) + 1;
+    if (b && e) {
+      const [bh, bm] = b.split(":").map(Number), [eh, em] = e.split(":").map(Number);
+      const h = (tageZwischen(datum, endeDatum) * 1440 + eh * 60 + em - (bh * 60 + bm)) / 60;
+      if (h > 0 && h <= 36) return `<b>Ende am ${tagKurz(endeDatum)}${endeDatum.slice(0, 4)}</b> · Dauer ${h.toLocaleString("de-DE", { maximumFractionDigits: 1 })} h`;
+    }
+    return `<b>${n} Tage</b> · für die Spieldauer Tagesergebnisse mit Uhrzeiten eintragen`;
   };
   const heute = () => {
     const d = new Date();
@@ -225,6 +239,17 @@
     .mehr { margin-top:14px; text-align:center; }
 
     .f2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+    .f5 { display:grid; grid-template-columns:1.2fr 1.2fr 1fr 1fr; gap:10px; }
+    .f5.ohnezeit { grid-template-columns:1fr 1fr; }
+    .opt { font-size:11px; color:${C.muted}; font-weight:400; opacity:.8; }
+    .tagschalter { margin-top:8px; }
+    .tagtabs .tg { position:relative; padding:6px 11px; font-size:13px; }
+    .tagtabs .pkt { position:absolute; top:4px; right:4px; width:6px; height:6px; border-radius:50%; background:${C.green}; }
+    .auf { font:inherit; font-size:11.5px; font-weight:600; cursor:pointer; color:${C.gold}; background:${C.gold}12; border:1px solid ${C.gold}44; border-radius:7px; padding:1px 7px; margin-top:3px; display:inline-block; }
+    .mx tr.unter td { background:rgba(255,255,255,0.02); font-size:12.5px; border-top-color:rgba(255,255,255,0.04); }
+    .mx tr.unter td.stk { background:#171a20; }
+    .mx tr.unter .einr { padding-left:12px; border-left:2px solid ${C.gold}55; display:inline-block; }
+    .tagbox { margin-top:10px; border:1px solid ${C.tileBorder}; border-radius:14px; padding:12px; }
     .hr { display:inline-flex; gap:14px; align-items:baseline; }
     .dlg.breit { max-width:680px; }
     .zeitknopf { color:${C.gold}; border-color:${C.gold}66; }
@@ -392,6 +417,7 @@
       .f4 { grid-template-columns:1fr 1fr; }
       .f4 label:first-child { grid-column:1 / -1; }
       .f2, .f3 { grid-template-columns:1fr; }
+      .f5 { grid-template-columns:1fr 1fr; }
       .lstats { grid-template-columns:repeat(2, minmax(0,1fr)); }
       .zr { grid-template-columns:minmax(0,1fr) 92px 92px; }
       .zh { display:none; }
@@ -425,6 +451,7 @@
       this._listeJahr = "alle";
       this._zeigeEndstand = false;
       this._listeOrt = "alle";
+      this._aufgeklappt = new Set();
       this._sessions = null;
       this._sessionsSig = null;
       this._ichSort = { key: "datum", ab: true };
@@ -597,7 +624,7 @@
       const jahre = [...new Set(tage.map((t) => t.datum.slice(0, 4)))].sort().reverse();
       if (this._listeJahr !== "alle") tage = tage.filter((t) => t.datum.startsWith(this._listeJahr));
       const orte = [...new Set(this._spieltage.map((t) => t.ort).filter(Boolean))].sort((a, b) => a.localeCompare(b, "de"));
-      const ohneZeit = this._spieltage.filter((t) => !t.beginn || !t.ende).length;
+      const ohneZeit = this._spieltage.filter((t) => (!t.beginn || !t.ende) && !(t.tage && t.tage.length)).length;
       if (this._listeOrt !== "alle") tage = tage.filter((t) => (t.ort || "") === this._listeOrt);
 
       const namen = new Map();
@@ -656,9 +683,33 @@
             return `<td class="${cls}gew ${sieg ? "sieg" : ""}" style="color:${vz(e.gewinn)}">${eur(e.gewinn).replace(" €", "")}</td>`;
           }).join("");
         }).join("");
-        return `<tr><td class="stk links"><div class="dz"><div>${datumDe(z.t.datum)}${info ? `<span class="klein">${esc(info)}</span>` : ""}</div>
+        const tl = z.t.tage || [];
+        const offen = tl.length && this._aufgeklappt.has(z.t.id);
+        const auf = tl.length ? `<button class="auf" data-auf="${esc(z.t.id)}" aria-expanded="${!!offen}">${offen ? "▾" : "▸"} ${tl.length} Tage</button>` : "";
+        let unter = "";
+        if (offen) {
+          unter = tl.map((t) => {
+            const m = {};
+            t.ergebnisse.forEach((e) => (m[e.spieler] = e));
+            const mx = Math.max(...t.ergebnisse.map((e) => e.gewinn));
+            const zz = spieler.map(([id]) => {
+              const e = m[id];
+              if (!e) return felder.map((_, i) => `<td class="${i === 0 ? "grp " : ""}nix">·</td>`).join("");
+              return felder.map(([fx], i) => {
+                const cls = i === 0 ? "grp " : "";
+                if (fx === "e") return `<td class="${cls}ein">${zahl(e.einsatz, 2)}</td>`;
+                if (fx === "s") return `<td class="${cls}ein">${zahl(e.endstand, 2)}</td>`;
+                return `<td class="${cls}gew ${e.gewinn === mx && mx > 0 ? "sieg" : ""}" style="color:${vz(e.gewinn)}">${eur(e.gewinn).replace(" €", "")}</td>`;
+              }).join("");
+            }).join("");
+            const tz = zeitText(t.beginn, t.ende);
+            return `<tr class="unter"><td class="stk links"><span class="einr">${tagKurz(t.datum)}</span>${tz ? `<span class="klein">${tz}</span>` : ""}</td>
+              <td>${zahl(t.topf, 0)} €<span class="klein">${t.ergebnisse.length} Spieler</span></td>${zz}</tr>`;
+          }).join("");
+        }
+        return `<tr class="${offen ? "offen" : ""}"><td class="stk links"><div class="dz"><div>${datumBereich(z.t.datum, z.t.ende_datum)}${info ? `<span class="klein">${esc(info)}</span>` : ""}${auf}</div>
           <button class="ed" data-edit="${esc(z.t.id)}" aria-label="Spieltag vom ${datumDe(z.t.datum)} bearbeiten" title="Bearbeiten">✎</button></div></td>
-          <td><b>${zahl(z.t.topf, 0)} €</b><span class="klein">${z.t.ergebnisse.length} Spieler</span></td>${zellen}</tr>`;
+          <td><b>${zahl(z.t.topf, 0)} €</b><span class="klein">${z.t.ergebnisse.length} Spieler</span></td>${zellen}</tr>${unter}`;
       }).join("");
 
       // Summen wie in der Excel-Kopfzeile
@@ -728,6 +779,11 @@
       r.querySelectorAll("[data-ort]").forEach((b) => b.addEventListener("click", () => {
         this._listeOrt = b.dataset.ort; this._renderMain();
       }));
+      r.querySelectorAll("[data-auf]").forEach((b) => b.addEventListener("click", () => {
+        const id = b.dataset.auf;
+        this._aufgeklappt.has(id) ? this._aufgeklappt.delete(id) : this._aufgeklappt.add(id);
+        this._renderMain();
+      }));
       r.querySelectorAll("[data-edit]").forEach((b) => b.addEventListener("click", () => {
         const tag = (this._spieltage || []).find((t) => t.id === b.dataset.edit);
         if (tag) this._oeffneForm(tag);
@@ -795,10 +851,10 @@
     _ichEintraege(ich) {
       const runde = (this._spieltage || []).filter((t) => t.ergebnisse.some((e) => e.spieler === ich)).map((t) => {
         const e = t.ergebnisse.find((x) => x.spieler === ich);
-        return { quelle: "runde", id: t.id, datum: t.datum, beginn: t.beginn, ende: t.ende, dauer: t.dauer_h, art: "runde", spielart: "cash",
+        return { quelle: "runde", id: t.id, datum: t.datum, ende_datum: t.ende_datum, beginn: t.beginn, ende: t.ende, dauer: t.dauer_h, art: "runde", spielart: "cash",
           blinds: t.blinds || "", ort: t.ort || "", einsatz: e.einsatz, gewinn: e.gewinn, notiz: t.bezeichnung || "", tag: t };
       });
-      const eigene = (this._sessions || []).map((x) => ({ quelle: "eigen", id: x.id, datum: x.datum, beginn: x.beginn, ende: x.ende, dauer: x.dauer_h,
+      const eigene = (this._sessions || []).map((x) => ({ quelle: "eigen", id: x.id, datum: x.datum, ende_datum: x.ende_datum, beginn: x.beginn, ende: x.ende, dauer: x.dauer_h,
         art: x.art, spielart: x.spielart, blinds: x.blinds || "", ort: x.ort || "", einsatz: x.einsatz, gewinn: x.gewinn, notiz: x.notiz || "", session: x }));
       return [...runde, ...eigene].sort((a, b) => (a.datum + (a.beginn || "")).localeCompare(b.datum + (b.beginn || "")));
     }
@@ -899,7 +955,7 @@
         const zeit = zeitText(x.beginn, x.ende);
         const ph = x.dauer ? x.gewinn / x.dauer : null;
         return `<tr>
-          <td>${datumDe(x.datum)}${zeit ? `<span class="klein">${zeit}</span>` : ""}</td>
+          <td>${datumBereich(x.datum, x.ende_datum)}${zeit ? `<span class="klein">${x.ende_datum ? `${x.beginn}–${x.ende}` : zeit}</span>` : ""}</td>
           <td><span class="art" style="color:${a.farbe};border-color:${a.farbe}66;background:${a.farbe}14">${esc(a.label)}</span>${x.art !== "runde" ? `<span class="klein">${x.spielart === "turnier" ? "Turnier" : "Cash Game"}</span>` : ""}</td>
           <td class="hm">${esc(x.ort) || "–"}${x.notiz ? `<span class="klein">${esc(x.notiz)}</span>` : ""}</td>
           <td>${esc(x.blinds) || "–"}</td>
@@ -1025,9 +1081,9 @@
       const blinds = [...new Set([...eig.map((e) => e.blinds), ...(this._spieltage || []).map((t) => t.blinds)].filter(Boolean))];
       this._form = null;
       this._sform = x
-        ? { id: x.id, datum: x.datum, beginn: x.beginn || "", ende: x.ende || "", art: x.art, spielart: x.spielart, blinds: x.blinds || "", ort: x.ort || "",
+        ? { id: x.id, datum: x.datum, ende_datum: x.ende_datum || "", beginn: x.beginn || "", ende: x.ende || "", art: x.art, spielart: x.spielart, blinds: x.blinds || "", ort: x.ort || "",
             einsatz: alsText(x.einsatz), gewinn: x.gewinn ? alsText(x.gewinn) : "", notiz: x.notiz || "", orte, blindsListe: blinds, fehler: "", busy: false }
-        : { id: null, datum: jetzt.datum, beginn: "", ende: "", art: letzte ? letzte.art : "casino", spielart: letzte ? letzte.spielart : "cash",
+        : { id: null, datum: jetzt.datum, ende_datum: "", beginn: "", ende: "", art: letzte ? letzte.art : "casino", spielart: letzte ? letzte.spielart : "cash",
             blinds: letzte ? letzte.blinds : "", ort: letzte ? letzte.ort : "", einsatz: "", gewinn: "", notiz: "", orte, blindsListe: blinds, fehler: "", busy: false };
       this._renderSession();
     }
@@ -1045,12 +1101,13 @@
           <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dt">
             <h2 id="dt">${f.id ? "Session bearbeiten" : "Session eintragen"}</h2>
             <div class="sub">Für Spiele außerhalb der Runde. Gewinn = Endstand minus Einsatz.</div>
-            <div class="f4">
+            <div class="f5">
               <label class="fl">Datum<input type="date" id="s-datum" value="${f.datum}"></label>
+              <label class="fl"><span>Enddatum <span class="opt">optional</span></span><input type="date" id="s-endedatum" value="${f.ende_datum}" min="${f.datum}"></label>
               <label class="fl">Beginn<input type="time" id="s-beginn" value="${f.beginn}"></label>
               <label class="fl">Ende<input type="time" id="s-ende" value="${f.ende}"></label>
             </div>
-            <div class="hint" id="s-mn">${mitternachtHinweis(f.datum, f.beginn, f.ende)}</div>
+            <div class="hint" id="s-mn">${zeitHinweis(f.datum, f.ende_datum, f.beginn, f.ende)}</div>
             <div class="sec"><span>Art</span></div>
             <div class="chips">${artChips}</div>
             <div class="chips" style="margin-top:8px">${spChips}</div>
@@ -1078,8 +1135,8 @@
       const schliessen = () => { this._sform = null; this._modal.innerHTML = ""; };
       $("#ov").addEventListener("click", (ev) => { if (ev.target.id === "ov" && !f.busy) schliessen(); });
       $("#abbr").addEventListener("click", schliessen);
-      [["#s-datum", "datum"], ["#s-beginn", "beginn"], ["#s-ende", "ende"], ["#s-ort", "ort"], ["#s-blinds", "blinds"], ["#s-notiz", "notiz"]].forEach(([q, k]) =>
-        $(q).addEventListener("input", (ev) => { f[k] = ev.target.value; this._sessionInfo(); $("#s-mn").innerHTML = mitternachtHinweis(f.datum, f.beginn, f.ende); }));
+      [["#s-datum", "datum"], ["#s-endedatum", "ende_datum"], ["#s-beginn", "beginn"], ["#s-ende", "ende"], ["#s-ort", "ort"], ["#s-blinds", "blinds"], ["#s-notiz", "notiz"]].forEach(([q, k]) =>
+        $(q).addEventListener("input", (ev) => { f[k] = ev.target.value; this._sessionInfo(); $("#s-mn").innerHTML = zeitHinweis(f.datum, f.ende_datum, f.beginn, f.ende); }));
       $("#s-einsatz").addEventListener("input", (ev) => { f.einsatz = ev.target.value; this._sessionInfo(); });
       $("#s-gewinn").addEventListener("input", (ev) => { f.gewinn = ev.target.value; this._sessionInfo(); });
       $("#s-pm").addEventListener("click", () => {
@@ -1146,7 +1203,7 @@
 
     // ------------------------------------------------------------ Uhrzeiten nachtragen
     _oeffneZeiten() {
-      const ohne = (this._spieltage || []).filter((t) => !t.beginn || !t.ende)
+      const ohne = (this._spieltage || []).filter((t) => (!t.beginn || !t.ende) && !(t.tage && t.tage.length))
         .sort((a, b) => b.datum.localeCompare(a.datum));
       this._form = null; this._sform = null;
       this._zform = {
@@ -1243,6 +1300,10 @@
       if (e == null || Number.isNaN(e) || Number.isNaN(g)) { box.innerHTML = ""; return; }
       const dauer = f.beginn && f.ende ? (() => {
         const [bh, bm] = f.beginn.split(":").map(Number), [eh, em] = f.ende.split(":").map(Number);
+        if (f.ende_datum && f.datum && f.ende_datum > f.datum) {
+          const h = (tageZwischen(f.datum, f.ende_datum) * 1440 + eh * 60 + em - (bh * 60 + bm)) / 60;
+          return h > 0 && h <= 36 ? h : null;
+        }
         let m = eh * 60 + em - (bh * 60 + bm); if (m <= 0) m += 1440; return m / 60;
       })() : null;
       const ok = g >= -e;
@@ -1259,7 +1320,9 @@
       if (e == null || Number.isNaN(e) || e < 0) return fehler("Bitte einen Einsatz angeben (0 für Freerolls).");
       if (Number.isNaN(g)) return fehler("Der Gewinn ist keine Zahl.");
       if (g < -e) return fehler("Der Verlust ist größer als der Einsatz.");
+      if (f.ende_datum && f.ende_datum < f.datum) return fehler("Das Enddatum liegt vor dem Startdatum.");
       const daten = { datum: f.datum, art: f.art, spielart: f.spielart, blinds: f.blinds.trim(), ort: f.ort.trim(), einsatz: e, gewinn: g, notiz: f.notiz.trim() };
+      if (f.ende_datum && f.ende_datum > f.datum) daten.ende_datum = f.ende_datum;
       if (f.beginn) daten.beginn = f.beginn;
       if (f.ende) daten.ende = f.ende;
       if (f.id) daten.id = f.id;
@@ -1363,7 +1426,7 @@
     _letzter(d) {
       const l = d.letzter;
       if (!l) return `<div class="h">Letzter Spieltag</div><div class="leer">Noch kein Spieltag gespeichert.</div>`;
-      const kopf = [`${WT[new Date(l.datum + "T12:00:00").getDay()]} ${datumDe(l.datum)}`, l.ort, l.bezeichnung].filter(Boolean).join(" · ");
+      const kopf = [l.ende_datum ? datumBereich(l.datum, l.ende_datum) : `${WT[new Date(l.datum + "T12:00:00").getDay()]} ${datumDe(l.datum)}`, l.ort, l.bezeichnung].filter(Boolean).join(" · ");
       const maxG = Math.max(...l.ergebnisse.map((e) => e.gewinn));
       const zeilen = l.ergebnisse.map((e) => `<tr class="${e.gewinn === maxG && maxG > 0 ? "sieg" : ""}">
           <td class="links n">${esc(e.name)}</td>
@@ -1374,7 +1437,7 @@
       const stats = [
         stat("Topf", `${zahl(l.topf, 0)} €`, `Ø ${zahl(l.topf / l.ergebnisse.length, 0)} € p. P.`),
         stat("Spieler", l.ergebnisse.length, `${l.ergebnisse.filter((e) => e.gewinn > 0).length} im Plus`),
-        stat("Dauer", l.dauer_h ? `${zahl(l.dauer_h, 1)} h` : "–", zeitText(l.beginn, l.ende) || "keine Uhrzeit"),
+        stat("Dauer", l.dauer_h ? `${zahl(l.dauer_h, 1)} h` : "–", l.tage && l.tage.length ? `an ${l.tage.length} Tagen` : l.ende_datum ? `${tageZwischen(l.datum, l.ende_datum) + 1} Tage` : zeitText(l.beginn, l.ende) || "keine Uhrzeit"),
         stat("Blinds", l.blinds ? esc(l.blinds) : "–", sieger(l)),
       ].join("");
       function sieger(t) {
@@ -1478,7 +1541,8 @@
       const aktive = d.spieler.filter((s) => s.aktiv !== false);
       const liste = aktive.map((s) => ({ id: s.id, name: s.name }));
       if (tag) {
-        tag.ergebnisse.forEach((e) => {
+        const alleErg = [...tag.ergebnisse, ...(tag.tage || []).flatMap((t) => t.ergebnisse)];
+        alleErg.forEach((e) => {
           if (!liste.some((s) => s.id === e.spieler)) liste.push({ id: e.spieler, name: e.name });
         });
         liste.sort((a, b) => a.name.localeCompare(b.name, "de"));
@@ -1487,14 +1551,51 @@
       const werte = {};
       liste.forEach((s) => (werte[s.id] = { e: String(this._config.standard_einsatz), g: "" }));
       if (tag) tag.ergebnisse.forEach((e) => (werte[e.spieler] = { e: alsText(e.einsatz), g: e.gewinn ? alsText(e.gewinn) : "" }));
-      this._form = tag
-        ? { id: tag.id, datum: tag.datum, beginn: tag.beginn || "", ende: tag.ende || "", bez: tag.bezeichnung || "", ort: tag.ort || "", blinds: tag.blinds || "",
-            alle: liste, sel: new Set(tag.ergebnisse.map((e) => e.spieler)), werte, orte: d.orte,
-            ignorieren: false, fehler: "", busy: false }
-        : { id: null, datum: jetzt.datum, beginn: "19:00", ende: jetzt.zeit, bez: "", ort: (d.letzter && d.letzter.ort) || "", blinds: (d.letzter && d.letzter.blinds) || "",
-            alle: liste, sel: new Set(aktive.map((s) => s.id)), werte, orte: d.orte,
-            ignorieren: false, fehler: "", busy: false };
+      const tage = {};
+      (tag && tag.tage || []).forEach((t) => {
+        const w = {};
+        t.ergebnisse.forEach((e) => (w[e.spieler] = { e: alsText(e.einsatz), g: e.gewinn ? alsText(e.gewinn) : "" }));
+        tage[t.datum] = { beginn: t.beginn || "", ende: t.ende || "", werte: w };
+      });
+      const basis = tag
+        ? { id: tag.id, datum: tag.datum, ende_datum: tag.ende_datum || "", beginn: tag.beginn || "", ende: tag.ende || "", bez: tag.bezeichnung || "", ort: tag.ort || "", blinds: tag.blinds || "",
+            sel: new Set(tag.ergebnisse.map((e) => e.spieler)), tageModus: !!(tag.tage && tag.tage.length) }
+        : { id: null, datum: jetzt.datum, ende_datum: "", beginn: "19:00", ende: jetzt.zeit, bez: "", ort: (d.letzter && d.letzter.ort) || "", blinds: (d.letzter && d.letzter.blinds) || "",
+            sel: new Set(aktive.map((s) => s.id)), tageModus: false };
+      this._form = { ...basis, alle: liste, werte, tage, aktTag: null, orte: d.orte, ignorieren: false, fehler: "", busy: false };
       this._renderForm();
+    }
+
+    _formTage() {
+      const f = this._form;
+      if (!f.datum || !f.ende_datum || f.ende_datum <= f.datum) return [];
+      const n = Math.min(tageZwischen(f.datum, f.ende_datum), 30);
+      return Array.from({ length: n + 1 }, (_, i) => isoPlus(f.datum, i));
+    }
+
+    _tagDaten(iso) {
+      const f = this._form;
+      const t = (f.tage[iso] = f.tage[iso] || { beginn: "", ende: "", werte: {} });
+      f.alle.forEach((s) => (t.werte[s.id] = t.werte[s.id] || { e: "", g: "" }));
+      return t;
+    }
+
+    _tagesSummen() {
+      const f = this._form;
+      const sum = {};
+      this._formTage().forEach((iso) => {
+        const t = f.tage[iso];
+        if (!t) return;
+        f.sel.forEach((id) => {
+          const w = t.werte[id];
+          if (!w) return;
+          const e = parse(w.e), g = parse(w.g);
+          if (!(e > 0)) return;
+          const x = (sum[id] = sum[id] || { e: 0, g: 0, n: 0 });
+          x.e += e; x.g += Number.isNaN(g) || g == null ? 0 : g; x.n++;
+        });
+      });
+      return sum;
     }
 
     _schliesseForm() {
@@ -1505,23 +1606,62 @@
     _renderForm() {
       const f = this._form;
       if (!f) return;
+      const tageL = this._formTage();
+      const mehrtaegig = tageL.length > 1;
+      if (!mehrtaegig) f.tageModus = false;
+      if (f.tageModus && !tageL.includes(f.aktTag) && f.aktTag !== "gesamt") f.aktTag = tageL[0];
       const chips = f.alle.map((s) => `<button class="chip ${f.sel.has(s.id) ? "an" : ""}" data-chip="${esc(s.id)}" aria-pressed="${f.sel.has(s.id)}">${esc(s.name)}</button>`).join("");
-      const zeilen = f.alle.filter((s) => f.sel.has(s.id)).map((s) => `
+      const gew = f.alle.filter((s) => f.sel.has(s.id));
+      const pmZeile = (s, w, de, dg, phE) => `
         <div class="nm">${esc(s.name)}</div>
-        <input inputmode="decimal" data-e="${esc(s.id)}" value="${esc(f.werte[s.id].e)}" aria-label="Einsatz ${esc(s.name)}">
+        <input inputmode="decimal" ${de}="${esc(s.id)}" value="${esc(w.e)}" placeholder="${phE}" aria-label="Einsatz ${esc(s.name)}">
         <div class="gw"><button class="pm" data-pm="${esc(s.id)}" aria-label="Vorzeichen umschalten">±</button>
-        <input inputmode="decimal" data-g="${esc(s.id)}" value="${esc(f.werte[s.id].g)}" placeholder="0" aria-label="Gewinn ${esc(s.name)}"></div>`).join("");
+        <input inputmode="decimal" ${dg}="${esc(s.id)}" value="${esc(w.g)}" placeholder="0" aria-label="Gewinn ${esc(s.name)}"></div>`;
+
+      let ergebnisHtml = "";
+      if (f.sel.size && !f.tageModus) {
+        ergebnisHtml = `<div class="sec"><span>Ergebnisse</span></div>
+          <div class="eing"><div class="kh">Spieler</div><div class="kh">Einsatz €</div><div class="kh">Gewinn €</div>${gew.map((s) => pmZeile(s, f.werte[s.id], "data-e", "data-g", "")).join("")}</div>`;
+      } else if (f.sel.size && f.tageModus) {
+        const tabs = tageL.map((iso) => {
+          const t = f.tage[iso];
+          const hat = t && gew.some((s) => parse((t.werte[s.id] || {}).e) > 0);
+          return `<button class="chip tg ${f.aktTag === iso ? "an" : ""}" data-tag="${iso}">${tagKurz(iso)}${hat ? '<span class="pkt"></span>' : ""}</button>`;
+        }).join("") + `<button class="chip tg ${f.aktTag === "gesamt" ? "an" : ""}" data-tag="gesamt">Gesamt</button>`;
+        let inhalt;
+        if (f.aktTag === "gesamt") {
+          const sum = this._tagesSummen();
+          const zeilen = gew.filter((s) => sum[s.id]).map((s) => `<tr><td class="links n">${esc(s.name)}</td><td class="num">${sum[s.id].n}</td>
+            <td class="num ein">${zahl(sum[s.id].e, 2)}</td><td class="num g" style="color:${vz(sum[s.id].g)}">${eur(sum[s.id].g)}</td></tr>`).join("");
+          inhalt = zeilen ? `<table class="ltab"><thead><tr><th class="links">Spieler</th><th class="num">Tage</th><th class="num">Einsatz</th><th class="num">Gewinn</th></tr></thead><tbody>${zeilen}</tbody></table>`
+            : `<div class="leer">Noch keine Tagesergebnisse eingetragen.</div>`;
+        } else {
+          const t = this._tagDaten(f.aktTag);
+          inhalt = `<div class="f2" style="margin-top:0">
+              <label class="fl">Beginn am ${tagKurz(f.aktTag)}<input type="time" id="t-beginn" value="${t.beginn}"></label>
+              <label class="fl">Ende<input type="time" id="t-ende" value="${t.ende}"></label>
+            </div>
+            <div class="hint" id="t-mn">${mitternachtHinweis(f.aktTag, t.beginn, t.ende)}</div>
+            <div class="eing" style="margin-top:8px"><div class="kh">Spieler</div><div class="kh">Einsatz €</div><div class="kh">Gewinn €</div>
+              ${gew.map((s) => pmZeile(s, t.werte[s.id], "data-te", "data-tg", "nicht dabei")).join("")}</div>`;
+        }
+        ergebnisHtml = `<div class="sec"><span>Tagesergebnisse</span><span>leer = an dem Tag nicht gespielt</span></div>
+          <div class="chips tagtabs">${tabs}</div><div class="tagbox">${inhalt}</div>`;
+      }
+
       this._modal.innerHTML = `
         <div class="overlay" id="ov">
-          <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dt">
+          <div class="dlg ${f.tageModus ? "breit" : ""}" role="dialog" aria-modal="true" aria-labelledby="dt">
             <h2 id="dt">${f.id ? "Spieltag bearbeiten" : "Spieltag eintragen"}</h2>
             <div class="sub">Gewinn = Endstand minus Einsatz. Verluste mit ± negativ machen.</div>
-            <div class="f4">
+            <div class="f5 ${f.tageModus ? "ohnezeit" : ""}">
               <label class="fl">Datum<input type="date" id="f-datum" value="${f.datum}"></label>
-              <label class="fl">Beginn<input type="time" id="f-beginn" value="${f.beginn}"></label>
-              <label class="fl">Ende<input type="time" id="f-ende" value="${f.ende}"></label>
+              <label class="fl"><span>Enddatum <span class="opt">optional</span></span><input type="date" id="f-endedatum" value="${f.ende_datum}" min="${f.datum}"></label>
+              ${f.tageModus ? "" : `<label class="fl">Beginn<input type="time" id="f-beginn" value="${f.beginn}"></label>
+              <label class="fl">Ende<input type="time" id="f-ende" value="${f.ende}"></label>`}
             </div>
-            <div class="hint" id="f-mn">${mitternachtHinweis(f.datum, f.beginn, f.ende)}</div>
+            <div class="hint" id="f-mn">${f.tageModus ? `<b>${tageL.length} Tage</b> · Uhrzeiten je Tag unten` : zeitHinweis(f.datum, f.ende_datum, f.beginn, f.ende)}</div>
+            ${mehrtaegig ? `<label class="cb tagschalter"><input type="checkbox" id="f-tagemodus" ${f.tageModus ? "checked" : ""}>Tagesergebnisse eintragen <span class="opt">optional – sonst nur das Gesamtergebnis</span></label>` : ""}
             <div class="f3">
               <label class="fl">Ort (optional)<input id="f-ort" list="orte-liste" value="${esc(f.ort)}" placeholder="z. B. Bei Marco" autocomplete="off"></label>
               <label class="fl">Blinds (optional)<input id="f-blinds" value="${esc(f.blinds)}" placeholder="z. B. 0,10/0,20" autocomplete="off"></label>
@@ -1530,8 +1670,7 @@
             <datalist id="orte-liste">${(f.orte || []).map((o) => `<option value="${esc(o)}"></option>`).join("")}</datalist>
             <div class="sec"><span>Wer war dabei?</span><span>${f.sel.size} ausgewählt</span></div>
             <div class="chips">${chips || '<span class="leer">Keine aktiven Spieler.</span>'}</div>
-            ${f.sel.size ? `<div class="sec"><span>Ergebnisse</span></div>
-              <div class="eing"><div class="kh">Spieler</div><div class="kh">Einsatz €</div><div class="kh">Gewinn €</div>${zeilen}</div>` : ""}
+            ${ergebnisHtml}
             <div id="summe"></div>
             <div class="msg" id="msg">${esc(f.fehler)}</div>
             <div class="fuss">
@@ -1541,16 +1680,24 @@
             </div>
           </div>
         </div>`;
-      const $ = (s) => this._modal.querySelector(s);
+      const $ = (q) => this._modal.querySelector(q);
+      const hinweis = () => { if (!f.tageModus) $("#f-mn").innerHTML = zeitHinweis(f.datum, f.ende_datum, f.beginn, f.ende); };
       $("#ov").addEventListener("click", (ev) => { if (ev.target.id === "ov" && !f.busy) this._schliesseForm(); });
       $("#abbr").addEventListener("click", () => this._schliesseForm());
       $("#speichern").addEventListener("click", () => this._speichern());
-      $("#f-datum").addEventListener("input", (ev) => (f.datum = ev.target.value));
-      $("#f-beginn").addEventListener("input", (ev) => (f.beginn = ev.target.value));
-      $("#f-ende").addEventListener("input", (ev) => (f.ende = ev.target.value));
-      ["#f-datum", "#f-beginn", "#f-ende"].forEach((q) => $(q).addEventListener("input", () => {
-        $("#f-mn").innerHTML = mitternachtHinweis(f.datum, f.beginn, f.ende);
-      }));
+      // Datum/Enddatum ändern die Zahl der Tage -> neu zeichnen, wenn sich die Mehrtägigkeit ändert
+      const datumGeaendert = () => {
+        const vorher = mehrtaegig, nachher = this._formTage().length > 1;
+        if (vorher !== nachher || f.tageModus) this._renderForm(); else hinweis();
+      };
+      $("#f-datum").addEventListener("change", (ev) => { f.datum = ev.target.value; if (f.ende_datum && f.ende_datum <= f.datum) f.ende_datum = ""; datumGeaendert(); });
+      $("#f-endedatum").addEventListener("change", (ev) => { f.ende_datum = ev.target.value; datumGeaendert(); });
+      if (!f.tageModus) {
+        $("#f-beginn").addEventListener("input", (ev) => { f.beginn = ev.target.value; hinweis(); });
+        $("#f-ende").addEventListener("input", (ev) => { f.ende = ev.target.value; hinweis(); });
+      }
+      const tm = $("#f-tagemodus");
+      if (tm) tm.addEventListener("change", () => { f.tageModus = tm.checked; f.aktTag = null; this._renderForm(); });
       $("#f-bez").addEventListener("input", (ev) => (f.bez = ev.target.value));
       $("#f-ort").addEventListener("input", (ev) => (f.ort = ev.target.value));
       $("#f-blinds").addEventListener("input", (ev) => (f.blinds = ev.target.value));
@@ -1560,13 +1707,24 @@
         f.sel.has(id) ? f.sel.delete(id) : f.sel.add(id);
         this._renderForm();
       }));
+      this._modal.querySelectorAll("[data-tag]").forEach((b) => b.addEventListener("click", () => { f.aktTag = b.dataset.tag; this._renderForm(); }));
       this._modal.querySelectorAll("[data-e]").forEach((i) => i.addEventListener("input", () => { f.werte[i.dataset.e].e = i.value; this._summe(); }));
       this._modal.querySelectorAll("[data-g]").forEach((i) => i.addEventListener("input", () => { f.werte[i.dataset.g].g = i.value; this._summe(); }));
+      if (f.tageModus && f.aktTag && f.aktTag !== "gesamt") {
+        const t = this._tagDaten(f.aktTag);
+        this._modal.querySelectorAll("[data-te]").forEach((i) => i.addEventListener("input", () => { t.werte[i.dataset.te].e = i.value; this._summe(); }));
+        this._modal.querySelectorAll("[data-tg]").forEach((i) => i.addEventListener("input", () => { t.werte[i.dataset.tg].g = i.value; this._summe(); }));
+        const tmn = () => ($("#t-mn").innerHTML = mitternachtHinweis(f.aktTag, t.beginn, t.ende));
+        $("#t-beginn").addEventListener("input", (ev) => { t.beginn = ev.target.value; tmn(); });
+        $("#t-ende").addEventListener("input", (ev) => { t.ende = ev.target.value; tmn(); });
+      }
       this._modal.querySelectorAll("[data-pm]").forEach((b) => b.addEventListener("click", () => {
         const id = b.dataset.pm;
-        const t = f.werte[id].g.trim();
-        f.werte[id].g = t.startsWith("-") ? t.slice(1) : "-" + (t || "");
-        this._modal.querySelector(`[data-g="${CSS.escape(id)}"]`).value = f.werte[id].g;
+        const w = f.tageModus && f.aktTag !== "gesamt" ? this._tagDaten(f.aktTag).werte[id] : f.werte[id];
+        const t = w.g.trim();
+        w.g = t.startsWith("-") ? t.slice(1) : "-" + (t || "");
+        const inp = this._modal.querySelector(f.tageModus ? `[data-tg="${CSS.escape(id)}"]` : `[data-g="${CSS.escape(id)}"]`);
+        if (inp) inp.value = w.g;
         this._summe();
       }));
       this._summe();
@@ -1578,12 +1736,23 @@
       if (!f || !box) return;
       if (f.fehler) { f.fehler = ""; const m = this._modal.querySelector("#msg"); if (m) m.textContent = ""; }
       if (!f.sel.size) { box.innerHTML = ""; return; }
-      let summe = 0, topf = 0;
-      f.sel.forEach((id) => { summe += parse(f.werte[id].g) || 0; topf += parse(f.werte[id].e) || 0; });
+      let summe = 0, topf = 0, tagInfo = "";
+      if (f.tageModus) {
+        const sum = this._tagesSummen();
+        Object.values(sum).forEach((x) => { summe += x.g; topf += x.e; });
+        if (f.aktTag && f.aktTag !== "gesamt" && f.tage[f.aktTag]) {
+          let ts = 0;
+          f.sel.forEach((id) => { const w = f.tage[f.aktTag].werte[id]; if (w && parse(w.e) > 0) ts += parse(w.g) || 0; });
+          ts = Math.round(ts * 100) / 100;
+          tagInfo = ` · ${tagKurz(f.aktTag)}: <span style="color:${Math.abs(ts) < 0.005 ? C.green : C.red}">${eur(ts)}</span>`;
+        }
+      } else {
+        f.sel.forEach((id) => { summe += parse(f.werte[id].g) || 0; topf += parse(f.werte[id].e) || 0; });
+      }
       summe = Math.round(summe * 100) / 100;
       const ok = Math.abs(summe) < 0.005;
       box.innerHTML = `<div class="summe ${ok ? "ok" : "nok"}">
-        <div><b>Summe der Gewinne: ${eur(summe)}</b><div style="font-size:12px;color:${C.muted};margin-top:2px">${ok ? `Passt. ${zahl(topf, 2)} € im Topf.` : "Sollte 0 € ergeben – bitte prüfen."}</div></div>
+        <div><b>Summe der Gewinne${f.tageModus ? " (gesamt)" : ""}: ${eur(summe)}</b><div style="font-size:12px;color:${C.muted};margin-top:2px">${ok ? `Passt. ${zahl(topf, 2)} € im Topf.` : "Sollte 0 € ergeben – bitte prüfen."}${tagInfo}</div></div>
         ${ok ? "" : `<label class="cb"><input type="checkbox" id="ign" ${f.ignorieren ? "checked" : ""}>Trotzdem speichern</label>`}
       </div>`;
       const ign = box.querySelector("#ign");
@@ -1596,30 +1765,63 @@
       if (m) m.textContent = text;
     }
 
+    _pruefeZeile(name, ew, gw, selE, selG) {
+      const e = parse(ew), g = parse(gw) ?? 0;
+      const mark = (q) => this._modal.querySelector(q)?.classList.add("fehler");
+      if (!(e > 0)) { mark(selE); return { fehler: `${name}: Einsatz fehlt.` }; }
+      if (Number.isNaN(g)) { mark(selG); return { fehler: `${name}: Gewinn ist keine Zahl.` }; }
+      if (g < -e) { mark(selG); return { fehler: `${name}: Verlust größer als der Einsatz.` }; }
+      return { e, g };
+    }
+
     async _speichern() {
       const f = this._form;
       if (!f || f.busy) return;
       this._modal.querySelectorAll("input.fehler").forEach((i) => i.classList.remove("fehler"));
       if (!f.datum) return this._zeigeFehler("Bitte ein Datum angeben.");
+      if (f.ende_datum && f.ende_datum < f.datum) return this._zeigeFehler("Das Enddatum liegt vor dem Startdatum.");
       if (!f.sel.size) return this._zeigeFehler("Wähle mindestens einen Spieler aus.");
-      const ergebnisse = [];
-      let fehler = "";
-      for (const s of f.alle.filter((s) => f.sel.has(s.id))) {
-        const e = parse(f.werte[s.id].e);
-        const g = parse(f.werte[s.id].g) ?? 0;
-        if (!(e > 0)) { fehler = fehler || `${s.name}: Einsatz fehlt.`; this._modal.querySelector(`[data-e="${CSS.escape(s.id)}"]`)?.classList.add("fehler"); continue; }
-        if (Number.isNaN(g)) { fehler = fehler || `${s.name}: Gewinn ist keine Zahl.`; this._modal.querySelector(`[data-g="${CSS.escape(s.id)}"]`)?.classList.add("fehler"); continue; }
-        if (g < -e) { fehler = fehler || `${s.name}: Verlust größer als der Einsatz.`; this._modal.querySelector(`[data-g="${CSS.escape(s.id)}"]`)?.classList.add("fehler"); continue; }
-        ergebnisse.push({ spieler: s.id, einsatz: e, gewinn: g });
+      const gew = f.alle.filter((s) => f.sel.has(s.id));
+      const daten = { datum: f.datum, bezeichnung: f.bez.trim(), ort: f.ort.trim(), blinds: (f.blinds || "").trim(), summe_ignorieren: !!f.ignorieren };
+      if (f.ende_datum && f.ende_datum > f.datum) daten.ende_datum = f.ende_datum;
+      let summe = 0;
+      if (f.tageModus) {
+        const tage = [];
+        for (const iso of this._formTage()) {
+          const t = f.tage[iso];
+          if (!t) continue;
+          const erg = [];
+          for (const s of gew) {
+            const w = t.werte[s.id] || { e: "", g: "" };
+            const leer = !String(w.e).trim() && !String(w.g).trim();
+            if (leer) continue;
+            const r = this._pruefeZeile(`${tagKurz(iso)} ${s.name}`, w.e, w.g, `[data-te="${CSS.escape(s.id)}"]`, `[data-tg="${CSS.escape(s.id)}"]`);
+            if (r.fehler) { f.aktTag !== iso && (f.aktTag = iso, this._renderForm()); return this._zeigeFehler(r.fehler); }
+            erg.push({ spieler: s.id, einsatz: r.e, gewinn: r.g });
+            summe += r.g;
+          }
+          if (!erg.length) continue;
+          const tag = { datum: iso, ergebnisse: erg };
+          if (t.beginn && t.ende) { tag.beginn = t.beginn; tag.ende = t.ende; }
+          tage.push(tag);
+        }
+        if (!tage.length) return this._zeigeFehler("Noch an keinem Tag Ergebnisse eingetragen.");
+        daten.tage = tage;
+      } else {
+        const ergebnisse = [];
+        for (const s of gew) {
+          const r = this._pruefeZeile(s.name, f.werte[s.id].e, f.werte[s.id].g, `[data-e="${CSS.escape(s.id)}"]`, `[data-g="${CSS.escape(s.id)}"]`);
+          if (r.fehler) return this._zeigeFehler(r.fehler);
+          ergebnisse.push({ spieler: s.id, einsatz: r.e, gewinn: r.g });
+          summe += r.g;
+        }
+        daten.ergebnisse = ergebnisse;
+        if (f.beginn) daten.beginn = f.beginn;
+        if (f.ende) daten.ende = f.ende;
       }
-      if (fehler) return this._zeigeFehler(fehler);
-      const summe = Math.round(ergebnisse.reduce((a, x) => a + x.gewinn, 0) * 100) / 100;
+      summe = Math.round(summe * 100) / 100;
       if (Math.abs(summe) >= 0.005 && !f.ignorieren) return this._zeigeFehler(`Die Gewinne ergeben ${eur(summe)} statt 0 €. Korrigieren oder „Trotzdem speichern“ anhaken.`);
-
-      const daten = { datum: f.datum, bezeichnung: f.bez.trim(), ort: f.ort.trim(), blinds: (f.blinds || "").trim(), ergebnisse, summe_ignorieren: !!f.ignorieren };
       if (f.id) daten.id = f.id;
-      if (f.beginn) daten.beginn = f.beginn;
-      if (f.ende) daten.ende = f.ende;
       f.busy = true; f.fehler = "";
       const btn = this._modal.querySelector("#speichern");
       if (btn) { btn.disabled = true; btn.textContent = "Speichert …"; }
