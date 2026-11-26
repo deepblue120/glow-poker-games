@@ -5,6 +5,7 @@ Home-Assistant-Integration für die Ergebnisse von Poker-Home-Games – mit eige
 - Spieltage mit Datum, Beginn, Ende, Bezeichnung und Ergebnissen pro Spieler erfassen
 - Ewige Tabelle mit Gewinn, Ø pro Spieltag, ROI, Gewinnquote und Gewinn pro Stunde
 - Podium, letzter Spieltag, Verlaufsgraph und Rekorde in einer Panel-Karte
+- Zweite Seite „Alle Spiele“: jedes Einzelergebnis, sortierbar nach Datum, Gewinn, Verlust, Einsatz und Gesamteinsatz, filterbar nach Spieler und Jahr
 - Prüfung, dass die Gewinne eines Abends zusammen 0 € ergeben
 - Import bestehender Ergebnisse aus CSV, automatischer Excel-Export nach jeder Änderung
 
@@ -45,8 +46,10 @@ type: custom:mg-poker-dashboard
 # optional:
 # title: Pokerrunde
 # standard_einsatz: 20
-# entity: sensor.poker_home_games_rangliste
+# entity: sensor.poker_home_games_rangliste   # wird sonst automatisch gefunden
 ```
+
+Oben rechts wechselt der Umschalter zwischen **Übersicht** und **Alle Spiele**.
 
 Über **Spieltag eintragen** öffnet sich direkt in der Karte ein Dialog für Datum, Uhrzeiten, Teilnehmer, Einsatz und Gewinn. Der ±-Knopf neben dem Gewinnfeld macht Verluste negativ (praktisch auf dem Handy). Ein Fehleintrag lässt sich unter „Letzter Spieltag“ löschen.
 
@@ -68,6 +71,7 @@ data:
 ```
 
 - **Aktion** `poker_home_games.letzten_spieltag_loeschen`
+- **Aktion** `poker_home_games.spieltage_abrufen` liefert alle Spieltage mit Einzelergebnissen als Antwort (nutzt die Karte für „Alle Spiele“)
 
 ## Entitäten
 

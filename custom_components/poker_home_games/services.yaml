@@ -24,3 +24,5 @@ spieltag_eintragen:
         boolean:
 
 letzten_spieltag_loeschen:
+
+spieltage_abrufen:

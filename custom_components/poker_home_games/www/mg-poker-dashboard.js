@@ -7,16 +7,16 @@
  * YAML (Panel-Ansicht):
  *   type: custom:mg-poker-dashboard
  *   # optional:
- *   # entity: sensor.poker_home_games_rangliste
+ *   # entity: sensor.poker_home_games_rangliste   (wird sonst automatisch gefunden)
  *   # title: Pokerrunde
  *   # standard_einsatz: 20
  */
 (() => {
-  const VERSION = "1.0.0";
+  const VERSION = "1.1.0";
   const TAG = "mg-poker-dashboard";
 
   const DEFAULTS = {
-    entity: "sensor.poker_home_games_rangliste",
+    entity: null,
     title: "Pokerrunde",
     standard_einsatz: 20,
   };
@@ -164,6 +164,36 @@
     .toast { position:fixed; left:50%; bottom:28px; transform:translateX(-50%); z-index:10; background:#161920; border:1px solid ${C.green}88;
       color:${C.text}; border-radius:14px; padding:12px 18px; font-size:14px; box-shadow:0 10px 40px rgba(0,0,0,0.5); }
 
+    /* Seitenumschalter */
+    .tabs { display:inline-flex; background:${C.tile}; border:1px solid ${C.tileBorder}; border-radius:14px; padding:4px; gap:4px; }
+    .tab { font:inherit; cursor:pointer; border:none; background:none; color:${C.muted}; font-size:14px; font-weight:600; padding:8px 14px; border-radius:10px; }
+    .tab.an { color:${C.gold}; background:linear-gradient(160deg, ${C.gold}30, ${C.gold}08); box-shadow:inset 0 0 0 1px ${C.gold}88; }
+    .kopf-r { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
+
+    /* Alle Spiele */
+    .filter { display:flex; flex-direction:column; gap:12px; }
+    .frow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .flab { font-size:11px; letter-spacing:1px; text-transform:uppercase; color:${C.muted}; width:78px; flex:none; }
+    .fchips { display:flex; flex-wrap:wrap; gap:6px; flex:1; min-width:0; }
+    .fc { font:inherit; cursor:pointer; border-radius:10px; padding:6px 11px; font-size:13px; font-weight:600; color:${C.muted};
+      background:${C.tile}; border:1px solid ${C.tileBorder}; }
+    .fc.an { color:${C.gold}; border-color:${C.gold}aa; background:linear-gradient(160deg, ${C.gold}2a, ${C.gold}06); }
+    .fc .pf { margin-left:4px; }
+    .tab:focus-visible, .fc:focus-visible { outline:2px solid ${C.gold}; outline-offset:2px; }
+    .tbl { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; color:${C.text}; font-size:14px; font-family:inherit; }
+    .tbl th { text-align:left; font-size:11px; letter-spacing:1px; text-transform:uppercase; color:${C.muted}; font-weight:600; padding:0 10px 10px; white-space:nowrap; }
+    .tbl th.num, .tbl td.num { text-align:right; }
+    .tbl th button { font:inherit; color:inherit; letter-spacing:inherit; text-transform:inherit; background:none; border:none; cursor:pointer; padding:0; }
+    .tbl th button.an { color:${C.gold}; }
+    .tbl td { padding:10px; border-top:1px solid ${C.tileBorder}; font-size:14px; vertical-align:middle; }
+    .tbl tr.neu td { border-top-color:rgba(255,255,255,0.16); }
+    .tbl td .klein { display:block; font-size:12px; color:${C.muted}; margin-top:2px; }
+    .tbl td.sp { font-weight:600; }
+    .tbl tr.top td.sp::after { content:" ♛"; color:${C.gold}; font-size:12px; }
+    .scroll { overflow-x:auto; margin:0 -10px; }
+    .tbl .mob { display:none; }
+    .mehr { margin-top:14px; text-align:center; }
+
     @media (max-width: 980px) { .grid { grid-template-columns:minmax(0,1fr); } }
     @media (max-width: 640px) {
       .wrap { padding:12px; }
@@ -177,6 +207,10 @@
       .f4 label:first-child { grid-column:1 / -1; }
       .eing { grid-template-columns:minmax(60px,1fr) 84px 128px; }
       .meta { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .flab { width:100%; }
+      .tbl .hm { display:none; }
+      .tbl .mob { display:block; }
+      .tbl td, .tbl th { padding-left:6px; padding-right:6px; }
     }
     @media (prefers-reduced-motion: no-preference) {
       .platz.p1 { animation: glow 3.2s ease-in-out infinite alternate; }
@@ -191,6 +225,15 @@
       this._config = { ...DEFAULTS };
       this._sig = null;
       this._form = null;
+      this._seite = "uebersicht";
+      this._spieltage = null;
+      this._spieltageSig = null;
+      this._ladeFehler = "";
+      this._listeSort = { key: "datum", ab: true };
+      this._listeSpieler = "alle";
+      this._listeJahr = "alle";
+      this._listeLimit = 150;
+      this._entityId = null;
     }
 
     static getStubConfig() { return {}; }
@@ -203,9 +246,22 @@
       if (this._hass) this._renderMain();
     }
 
+    _findeEntity(hass) {
+      if (this._config.entity) return this._config.entity;
+      if (this._entityId && hass.states[this._entityId]) return this._entityId;
+      const id = Object.keys(hass.states).find((e) => {
+        if (!e.startsWith("sensor.")) return false;
+        const a = hass.states[e].attributes;
+        return a && Array.isArray(a.rangliste) && Array.isArray(a.spieler_liste);
+      });
+      this._entityId = id || null;
+      return id || "sensor.poker_home_games_rangliste";
+    }
+
     set hass(hass) {
       this._hass = hass;
-      const s = hass.states[this._config.entity];
+      this._ent = this._findeEntity(hass);
+      const s = hass.states[this._ent];
       const sig = s ? s.last_updated + "|" + s.state : "fehlt";
       if (sig !== this._sig) {
         this._sig = sig;
@@ -215,7 +271,7 @@
 
     // ------------------------------------------------------------ Daten
     _daten() {
-      const s = this._hass && this._hass.states[this._config.entity];
+      const s = this._hass && this._hass.states[this._ent];
       if (!s) return null;
       const a = s.attributes || {};
       return {
@@ -244,7 +300,7 @@
       const d = this._daten();
       if (!d) {
         this._root.innerHTML = `<div class="card"><div class="h">Poker</div>
-          <div class="leer">Sensor <b>${esc(this._config.entity)}</b> nicht gefunden. Ist die Integration „Poker Home Games“ eingerichtet?</div></div>`;
+          <div class="leer">Sensor <b>${esc(this._ent)}</b> nicht gefunden. Ist die Integration „Poker Home Games“ eingerichtet?</div></div>`;
         return;
       }
       const stand = d.letzter ? `Stand nach dem Spieltag vom ${datumDe(d.letzter.datum)}` : "Noch kein Spieltag gespeichert";
@@ -254,8 +310,28 @@
             <div class="titel">${esc(this._config.title)} <span class="suits">♠ ♥ ♦ ♣</span></div>
             <div class="stand">${stand}</div>
           </div>
-          <button class="btn gold" id="neu">＋ Spieltag eintragen</button>
+          <div class="kopf-r">
+            <div class="tabs" role="tablist">
+              <button class="tab ${this._seite === "uebersicht" ? "an" : ""}" role="tab" aria-selected="${this._seite === "uebersicht"}" data-seite="uebersicht">Übersicht</button>
+              <button class="tab ${this._seite === "spiele" ? "an" : ""}" role="tab" aria-selected="${this._seite === "spiele"}" data-seite="spiele">Alle Spiele</button>
+            </div>
+            <button class="btn gold" id="neu">＋ Spieltag eintragen</button>
+          </div>
         </div>
+        ${this._seite === "spiele" ? this._seiteSpiele(d) : this._seiteUebersicht(d)}`;
+      this._root.querySelector("#neu").addEventListener("click", () => this._oeffneForm());
+      this._root.querySelectorAll("[data-seite]").forEach((b) => b.addEventListener("click", () => {
+        if (this._seite === b.dataset.seite) return;
+        this._seite = b.dataset.seite;
+        this._renderMain();
+      }));
+      if (this._seite === "spiele") this._bindeSpiele();
+      const del = this._root.querySelector("#loeschen");
+      if (del) del.addEventListener("click", () => this._loescheLetzten());
+    }
+
+    _seiteUebersicht(d) {
+      return `
         <div class="stats">
           ${this._tile("Spieltage", d.spieltage, d.verlauf.length ? `seit ${datumDe(d.verlauf[0].datum).slice(3)}` : "")}
           ${this._tile("Teilnahmen", d.teilnahmen, d.spieltage ? `Ø ${zahl(d.teilnahmen / d.spieltage, 1)} Spieler pro Abend` : "")}
@@ -273,9 +349,144 @@
             <div class="card"><div class="h">Rekorde</div>${this._rekorde(d)}</div>
           </div>
         </div>`;
-      this._root.querySelector("#neu").addEventListener("click", () => this._oeffneForm());
-      const del = this._root.querySelector("#loeschen");
-      if (del) del.addEventListener("click", () => this._loescheLetzten());
+    }
+
+    // ------------------------------------------------------------ Alle Spiele
+    _seiteSpiele(d) {
+      // bei Änderungen am Sensor neu laden
+      if (this._spieltageSig !== this._sig && !this._laedt) this._ladeSpieltage();
+      if (!this._spieltage) {
+        return `<div class="card"><div class="leer">${this._ladeFehler ? esc(this._ladeFehler) : "Lade alle Spiele …"}</div></div>`;
+      }
+      const tage = this._spieltage;
+      // Einzelergebnisse aufbauen
+      let zeilen = [];
+      tage.forEach((t) => {
+        const maxG = Math.max(...t.ergebnisse.map((e) => e.gewinn));
+        t.ergebnisse.forEach((e) => zeilen.push({
+          tag: t.id, datum: t.datum, beginn: t.beginn, ende: t.ende, bez: t.bezeichnung,
+          topf: t.topf, anzahl: t.ergebnisse.length, spieler: e.spieler, name: e.name,
+          einsatz: e.einsatz, gewinn: e.gewinn, sieger: e.gewinn === maxG && maxG > 0,
+        }));
+      });
+      const jahre = [...new Set(tage.map((t) => t.datum.slice(0, 4)))].sort().reverse();
+      const namen = new Map();
+      zeilen.forEach((z) => namen.set(z.spieler, z.name));
+      if (this._listeSpieler !== "alle") zeilen = zeilen.filter((z) => z.spieler === this._listeSpieler);
+      if (this._listeJahr !== "alle") zeilen = zeilen.filter((z) => z.datum.startsWith(this._listeJahr));
+
+      const { key, ab } = this._listeSort;
+      const wert = {
+        datum: (z) => z.datum + (z.beginn || ""),
+        gewinn: (z) => z.gewinn,
+        verlust: (z) => -z.gewinn,
+        einsatz: (z) => z.einsatz,
+        topf: (z) => z.topf,
+      }[key];
+      zeilen.sort((a, b) => {
+        const va = wert(a), vb = wert(b);
+        const c = va < vb ? -1 : va > vb ? 1 : 0;
+        if (c) return ab ? -c : c;
+        return a.datum < b.datum ? 1 : a.datum > b.datum ? -1 : b.gewinn - a.gewinn;
+      });
+
+      // Kennzahlen zur Auswahl
+      const n = zeilen.length;
+      const sumG = zeilen.reduce((a, z) => a + z.gewinn, 0);
+      const sumE = zeilen.reduce((a, z) => a + z.einsatz, 0);
+      const spieltage = new Set(zeilen.map((z) => z.tag)).size;
+      const plus = zeilen.filter((z) => z.gewinn > 0).length;
+      const einzeln = this._listeSpieler !== "alle";
+
+      const sortBtn = (k, label) => {
+        const an = key === k;
+        const pfeil = an ? (ab ? " ↓" : " ↑") : "";
+        return `<button class="fc ${an ? "an" : ""}" data-sort="${k}" aria-pressed="${an}">${label}<span class="pf">${pfeil}</span></button>`;
+      };
+      const th = (k, label, cls = "") => `<th class="${cls}"><button class="${key === k ? "an" : ""}" data-sort="${k}">${label}${key === k ? (ab ? " ↓" : " ↑") : ""}</button></th>`;
+
+      const sichtbar = zeilen.slice(0, this._listeLimit);
+      let letzterTag = null;
+      const rows = sichtbar.map((z) => {
+        const neu = key === "datum" && z.tag !== letzterTag && letzterTag !== null;
+        letzterTag = z.tag;
+        const zeit = z.beginn && z.ende ? `${z.beginn}–${z.ende}` : "";
+        const info = [z.bez, zeit].filter(Boolean).join(" · ");
+        return `<tr class="${neu ? "neu" : ""} ${z.sieger ? "top" : ""}">
+          <td>${datumDe(z.datum)}${info ? `<span class="klein">${esc(info)}</span>` : ""}<span class="klein mob">Topf ${zahl(z.topf, 0)} €</span></td>
+          <td class="sp">${esc(z.name)}</td>
+          <td class="num">${zahl(z.einsatz, 2)} €</td>
+          <td class="num" style="color:${vz(z.gewinn)};font-weight:700">${eur(z.gewinn)}</td>
+          <td class="num hm">${zahl(z.topf, 0)} €<span class="klein">${z.anzahl} Spieler</span></td>
+        </tr>`;
+      }).join("");
+
+      return `
+        <div class="card filter">
+          <div class="frow"><div class="flab">Sortieren</div><div class="fchips">
+            ${sortBtn("datum", "Datum")}${sortBtn("gewinn", "Gewinn")}${sortBtn("verlust", "Verlust")}${sortBtn("einsatz", "Einsatz")}${sortBtn("topf", "Gesamteinsatz")}
+          </div></div>
+          <div class="frow"><div class="flab">Spieler</div><div class="fchips">
+            <button class="fc ${this._listeSpieler === "alle" ? "an" : ""}" data-spieler="alle">Alle</button>
+            ${[...namen].sort((a, b) => a[1].localeCompare(b[1], "de")).map(([id, nm]) => `<button class="fc ${this._listeSpieler === id ? "an" : ""}" data-spieler="${esc(id)}">${esc(nm)}</button>`).join("")}
+          </div></div>
+          <div class="frow"><div class="flab">Jahr</div><div class="fchips">
+            <button class="fc ${this._listeJahr === "alle" ? "an" : ""}" data-jahr="alle">Alle</button>
+            ${jahre.map((j) => `<button class="fc ${this._listeJahr === j ? "an" : ""}" data-jahr="${j}">${j}</button>`).join("")}
+          </div></div>
+        </div>
+        <div class="stats">
+          ${this._tile(einzeln ? "Spiele" : "Ergebnisse", n, `${spieltage} Spieltage`)}
+          ${this._tile("Gewinn / Verlust", `<span style="color:${vz(sumG)}">${eurKurz(sumG)}</span>`, einzeln ? `Ø ${eur(n ? sumG / n : 0)} pro Spiel` : "sollte über alle Spieler ≈ 0 sein")}
+          ${this._tile("Einsatz", Math.round(sumE).toLocaleString("de-DE") + " €", `Ø ${zahl(n ? sumE / n : 0, 2)} € pro ${einzeln ? "Spiel" : "Ergebnis"}`)}
+          ${this._tile("Im Plus", n ? Math.round((plus / n) * 100) + " %" : "–", `${plus} von ${n}`)}
+        </div>
+        <div class="card">
+          <div class="h">Alle Spiele <small>${n} ${n === 1 ? "Ergebnis" : "Ergebnisse"}</small></div>
+          ${n ? `<div class="scroll"><table class="tbl">
+            <thead><tr>${th("datum", "Datum")}<th>Spieler</th>${th("einsatz", "Einsatz", "num")}${th(key === "verlust" ? "verlust" : "gewinn", key === "verlust" ? "Verlust" : "Gewinn", "num")}${th("topf", "Gesamteinsatz", "num hm")}</tr></thead>
+            <tbody>${rows}</tbody></table></div>
+            ${n > this._listeLimit ? `<div class="mehr"><button class="btn" id="mehr">Weitere ${Math.min(150, n - this._listeLimit)} anzeigen</button></div>` : ""}`
+          : `<div class="leer">Keine Spiele für diese Auswahl.</div>`}
+        </div>`;
+    }
+
+    _bindeSpiele() {
+      const r = this._root;
+      const DEFAULT_AB = { datum: true, gewinn: true, verlust: true, einsatz: true, topf: true };
+      r.querySelectorAll("[data-sort]").forEach((b) => b.addEventListener("click", () => {
+        const k = b.dataset.sort;
+        if (this._listeSort.key === k) this._listeSort.ab = !this._listeSort.ab;
+        else this._listeSort = { key: k, ab: DEFAULT_AB[k] };
+        this._listeLimit = 150;
+        this._renderMain();
+      }));
+      r.querySelectorAll("[data-spieler]").forEach((b) => b.addEventListener("click", () => {
+        this._listeSpieler = b.dataset.spieler; this._listeLimit = 150; this._renderMain();
+      }));
+      r.querySelectorAll("[data-jahr]").forEach((b) => b.addEventListener("click", () => {
+        this._listeJahr = b.dataset.jahr; this._listeLimit = 150; this._renderMain();
+      }));
+      const mehr = r.querySelector("#mehr");
+      if (mehr) mehr.addEventListener("click", () => { this._listeLimit += 150; this._renderMain(); });
+    }
+
+    async _ladeSpieltage() {
+      this._laedt = true;
+      const sig = this._sig;
+      try {
+        const res = await this._hass.callWS({
+          type: "call_service", domain: "poker_home_games", service: "spieltage_abrufen",
+          service_data: {}, return_response: true,
+        });
+        this._spieltage = (res && res.response && res.response.spieltage) || [];
+        this._ladeFehler = "";
+      } catch (err) {
+        this._ladeFehler = "Spiele konnten nicht geladen werden: " + ((err && err.message) || err);
+      }
+      this._spieltageSig = sig;
+      this._laedt = false;
+      if (this._seite === "spiele") this._renderMain();
     }
 
     _tile(l, v, s) {

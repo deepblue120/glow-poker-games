@@ -13,3 +13,4 @@ CONF_SPIELER = "spieler"
 
 SERVICE_SPIELTAG_EINTRAGEN = "spieltag_eintragen"
 SERVICE_LETZTEN_LOESCHEN = "letzten_spieltag_loeschen"
+SERVICE_SPIELTAGE_ABRUFEN = "spieltage_abrufen"

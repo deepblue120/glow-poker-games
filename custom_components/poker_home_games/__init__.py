@@ -28,12 +28,13 @@ from .const import (
     DOMAIN,
     SERVICE_LETZTEN_LOESCHEN,
     SERVICE_SPIELTAG_EINTRAGEN,
+    SERVICE_SPIELTAGE_ABRUFEN,
 )
 from .data import PokerData, fmt_eur
 
 KARTE_URL = "/poker_home_games/mg-poker-dashboard.js"
 KARTE_DATEI = Path(__file__).parent / "www" / "mg-poker-dashboard.js"
-KARTE_VERSION = "1.2.0"
+KARTE_VERSION = "1.3.0"
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -118,6 +119,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             raise ServiceValidationError("Es sind keine Spieltage gespeichert")
         return info if call.return_response else None
 
+    async def spieltage_abrufen(call: ServiceCall) -> ServiceResponse:
+        data = _poker_data(hass)
+        return {"spieltage": [data.spieltag_info(t) for t in data.sortiert()]}
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SPIELTAGE_ABRUFEN,
+        spieltage_abrufen,
+        supports_response=SupportsResponse.ONLY,
+    )
     hass.services.async_register(
         DOMAIN,
         SERVICE_SPIELTAG_EINTRAGEN,

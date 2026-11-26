@@ -88,17 +88,39 @@
       "name": "Spieltag eintragen",
       "description": "Speichert die Ergebnisse eines Spieltags.",
       "fields": {
-        "datum": {"name": "Datum", "description": "Tag des Spiels."},
-        "beginn": {"name": "Beginn", "description": "Uhrzeit Spielbeginn."},
-        "ende": {"name": "Ende", "description": "Uhrzeit Spielende (nach Mitternacht ist erlaubt)."},
-        "bezeichnung": {"name": "Bezeichnung", "description": "Optional, z. B. Malle."},
-        "ergebnisse": {"name": "Ergebnisse", "description": "Liste mit spieler, einsatz und gewinn je Spieler."},
-        "summe_ignorieren": {"name": "Summe ignorieren", "description": "Auch speichern, wenn die Gewinne zusammen nicht 0 ergeben."}
+        "datum": {
+          "name": "Datum",
+          "description": "Tag des Spiels."
+        },
+        "beginn": {
+          "name": "Beginn",
+          "description": "Uhrzeit Spielbeginn."
+        },
+        "ende": {
+          "name": "Ende",
+          "description": "Uhrzeit Spielende (nach Mitternacht ist erlaubt)."
+        },
+        "bezeichnung": {
+          "name": "Bezeichnung",
+          "description": "Optional, z. B. Malle."
+        },
+        "ergebnisse": {
+          "name": "Ergebnisse",
+          "description": "Liste mit spieler, einsatz und gewinn je Spieler."
+        },
+        "summe_ignorieren": {
+          "name": "Summe ignorieren",
+          "description": "Auch speichern, wenn die Gewinne zusammen nicht 0 ergeben."
+        }
       }
     },
     "letzten_spieltag_loeschen": {
       "name": "Letzten Spieltag löschen",
       "description": "Entfernt den zuletzt gespielten Spieltag."
+    },
+    "spieltage_abrufen": {
+      "name": "Spieltage abrufen",
+      "description": "Liefert alle Spieltage mit Einzelergebnissen (für die Dashboard-Karte)."
     }
   }
 }
