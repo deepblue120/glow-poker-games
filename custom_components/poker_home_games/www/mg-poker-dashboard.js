@@ -14,7 +14,7 @@
  *   # ich_titel: Meine Spiele
  */
 (() => {
-  const VERSION = "1.9.0";
+  const VERSION = "1.9.1";
   const TAG = "mg-poker-dashboard";
 
   const DEFAULTS = {
@@ -265,7 +265,6 @@
     .ltab tr.sieg td { background:${C.gold}12; }
     .ltab tr.sieg td:first-child { box-shadow:inset 2px 0 0 ${C.gold}; }
     .ltab tr.sieg td.n::after { content:" ♛"; color:${C.gold}; font-size:11px; }
-    .ltab tfoot td { border-top:1px solid rgba(255,255,255,0.2); font-weight:700; font-size:13px; color:${C.muted}; }
     .lstats { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; margin-top:12px; }
     .ls { background:${C.tile}; border:1px solid ${C.tileBorder}; border-radius:12px; padding:7px 10px; min-width:0; }
     .lsl { font-size:10px; letter-spacing:1px; text-transform:uppercase; color:${C.muted}; }
@@ -367,7 +366,6 @@
       .seite-uebersicht .paar .ls { padding:5px 8px; }
       .seite-uebersicht .paar .lsv { font-size:14px; }
       .seite-uebersicht .paar .lss { display:none; }
-      .seite-uebersicht .paar .ltab tfoot { display:none; }
       .seite-uebersicht .paar .aktionen { padding-top:6px; }
       .seite-uebersicht .tile.rk { padding:6px 10px; }
       .seite-uebersicht .tile.rk .tv { font-size:15px; }
@@ -1372,9 +1370,6 @@
           <td class="num ein">${zahl(e.einsatz, 2)}</td>
           <td class="num ein">${zahl(e.endstand, 2)}</td>
           <td class="num g" style="color:${vz(e.gewinn)}">${eur(e.gewinn).replace(" €", "")}</td></tr>`).join("");
-      const sumE = l.ergebnisse.reduce((a, e) => a + e.einsatz, 0);
-      const sumS = l.ergebnisse.reduce((a, e) => a + e.endstand, 0);
-      const diff = Math.round((sumS - sumE) * 100) / 100;
       const stat = (label, wert, sub = "") => `<div class="ls"><div class="lsl">${label}</div><div class="lsv">${wert}</div>${sub ? `<div class="lss">${sub}</div>` : ""}</div>`;
       const stats = [
         stat("Topf", `${zahl(l.topf, 0)} €`, `Ø ${zahl(l.topf / l.ergebnisse.length, 0)} € p. P.`),
@@ -1390,8 +1385,6 @@
         <div class="ltab-wrap"><table class="ltab">
           <thead><tr><th class="links">Spieler</th><th class="num">Einsatz</th><th class="num">Endstand</th><th class="num">Gewinn</th></tr></thead>
           <tbody>${zeilen}</tbody>
-          <tfoot><tr><td class="links">Summe</td><td class="num">${zahl(sumE, 2)}</td><td class="num">${zahl(sumS, 2)}</td>
-            <td class="num" style="color:${Math.abs(diff) < 0.005 ? C.muted : C.red}">${Math.abs(diff) < 0.005 ? "±0,00" : eur(diff).replace(" €", "")}</td></tr></tfoot>
         </table></div>
         <div class="lstats">${stats}</div>
         <div class="aktionen"><button class="link edit" id="bearbeiten">Bearbeiten</button><button class="link" id="loeschen">Löschen</button></div>`;
