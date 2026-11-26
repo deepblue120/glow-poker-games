@@ -34,7 +34,7 @@ from .data import PokerData, fmt_eur
 
 KARTE_URL = "/poker_home_games/mg-poker-dashboard.js"
 KARTE_DATEI = Path(__file__).parent / "www" / "mg-poker-dashboard.js"
-KARTE_VERSION = "1.3.0"
+KARTE_VERSION = "1.4.0"
 
 _LOGGER = logging.getLogger(__name__)
 
