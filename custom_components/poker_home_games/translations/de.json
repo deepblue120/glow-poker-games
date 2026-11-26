@@ -293,6 +293,16 @@
     "sessions_abrufen": {
       "name": "Eigene Sessions abrufen",
       "description": "Liefert alle eigenen Sessions (für die Dashboard-Karte)."
+    },
+    "sessions_importieren": {
+      "name": "Eigene Sessions importieren",
+      "description": "Importiert den Export einer Poker-Tracking-App (Tabelle mit id, starttime, endtime, location, type, cashout, totalprofit …). Bereits importierte IDs werden übersprungen.",
+      "fields": {
+        "text": {
+          "name": "Export",
+          "description": "Eingefügter Tabellentext inklusive Kopfzeile."
+        }
+      }
     }
   },
   "selector": {

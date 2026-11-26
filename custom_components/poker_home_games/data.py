@@ -412,6 +412,98 @@ class PokerData:
         await self.async_save()
         return self.session_info(session)
 
+    # ------------------------------------------------------------ Import aus Tracking-App
+    @staticmethod
+    def lese_tracker_export(text: str) -> tuple[list[dict[str, Any]], list[str]]:
+        """Export einer Poker-Tracking-App lesen (Tabulator, Semikolon oder Komma).
+
+        Erwartete Spalten: id, starttime, endtime, variant, location, type,
+        buyin, cashout, totalprofit (weitere werden ignoriert).
+        Einsatz = cashout − totalprofit (enthält damit auch Rebuys).
+        """
+        zeilen = [z for z in text.replace("\r", "").split("\n") if z.strip()]
+        if not zeilen:
+            raise ValueError("Kein Text eingefügt")
+        kopf = zeilen[0]
+        trenner = "\t" if "\t" in kopf else ";" if ";" in kopf else ","
+        reader = csv.DictReader(zeilen, delimiter=trenner)
+        felder = {f.strip().lower(): f for f in (reader.fieldnames or [])}
+        pflicht = {"starttime", "cashout", "totalprofit"}
+        if not pflicht <= set(felder):
+            raise ValueError("Spalten starttime, cashout und totalprofit nicht gefunden")
+
+        def wert(zeile: dict, name: str) -> str:
+            key = felder.get(name)
+            return (zeile.get(key) or "").strip() if key else ""
+
+        def zahl(text_: str) -> float:
+            t = text_.replace("€", "").replace(" ", "")
+            if "," in t:
+                t = t.replace(".", "").replace(",", ".")
+            return float(t) if t else 0.0
+
+        def zeitpunkt(text_: str) -> datetime | None:
+            for fmt in ("%d.%m.%Y %H:%M", "%d.%m.%Y %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d %H:%M:%S", "%d.%m.%Y"):
+                try:
+                    return datetime.strptime(text_, fmt)
+                except ValueError:
+                    continue
+            return None
+
+        art_map = {"home game": "home_game", "homegame": "home_game", "casino": "casino",
+                   "online": "online"}
+        ergebnis: list[dict[str, Any]] = []
+        fehler: list[str] = []
+        for nr, zeile in enumerate(reader, start=2):
+            start = zeitpunkt(wert(zeile, "starttime"))
+            if start is None:
+                fehler.append(f"Zeile {nr}: Startzeit '{wert(zeile, 'starttime')}' nicht lesbar")
+                continue
+            ende = zeitpunkt(wert(zeile, "endtime"))
+            try:
+                cashout = zahl(wert(zeile, "cashout"))
+                profit = zahl(wert(zeile, "totalprofit"))
+            except ValueError:
+                fehler.append(f"Zeile {nr}: Beträge nicht lesbar")
+                continue
+            variante = wert(zeile, "variant").lower()
+            spiel = " ".join(x for x in (wert(zeile, "limit"), wert(zeile, "game")) if x)
+            ergebnis.append(
+                {
+                    "extern_id": wert(zeile, "id") or None,
+                    "datum": start.date(),
+                    "beginn": start.time() if " " in wert(zeile, "starttime") else None,
+                    "ende": ende.time() if ende and " " in wert(zeile, "endtime") else None,
+                    "art": art_map.get(wert(zeile, "type").lower(), "sonstiges"),
+                    "spielart": "turnier" if ("tour" in variante or "turnier" in variante or "sng" in variante) else "cash",
+                    "blinds": wert(zeile, "blinds") or wert(zeile, "stakes"),
+                    "ort": wert(zeile, "location"),
+                    "einsatz": max(0.0, cashout - profit),
+                    "gewinn": profit,
+                    "notiz": spiel,
+                }
+            )
+        return ergebnis, fehler
+
+    async def async_sessions_importieren(self, text: str) -> dict[str, Any]:
+        neue, fehler = self.lese_tracker_export(text)
+        vorhanden = {s.get("extern_id") for s in self.sessions if s.get("extern_id")}
+        importiert = uebersprungen = 0
+        for daten in neue:
+            ext = daten.pop("extern_id")
+            if ext and ext in vorhanden:
+                uebersprungen += 1
+                continue
+            session = {"id": uuid.uuid4().hex, **self._session_felder(daten)}
+            if ext:
+                session["extern_id"] = ext
+                vorhanden.add(ext)
+            self.sessions.append(session)
+            importiert += 1
+        if importiert:
+            await self.async_save()
+        return {"importiert": importiert, "uebersprungen": uebersprungen, "fehler": fehler}
+
     @staticmethod
     def _orte(tage: list[dict[str, Any]]) -> list[str]:
         """Bisher verwendete Orte, häufigste zuerst."""

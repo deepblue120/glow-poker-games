@@ -14,7 +14,7 @@
  *   # ich_titel: Meine Spiele
  */
 (() => {
-  const VERSION = "1.4.0";
+  const VERSION = "1.5.0";
   const TAG = "mg-poker-dashboard";
 
   const DEFAULTS = {
@@ -206,6 +206,10 @@
     .mehr { margin-top:14px; text-align:center; }
 
     .f2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+    .hr { display:inline-flex; gap:14px; align-items:baseline; }
+    textarea { font:inherit; font-family:ui-monospace, Menlo, Consolas, monospace; font-size:12px; color:${C.text}; background:${C.tile};
+      border:1px solid ${C.tileBorder}; border-radius:12px; padding:10px 12px; width:100%; resize:vertical; white-space:pre; overflow:auto; color-scheme:dark; }
+    textarea:focus { border-color:${C.gold}88; outline:none; }
     .f3 { display:grid; grid-template-columns:1.2fr 1fr 1.2fr; gap:10px; margin-top:10px; }
     .dot { width:10px; height:10px; border-radius:50%; flex:none; }
     .art { display:inline-block; font-size:12px; font-weight:600; border:1px solid; border-radius:8px; padding:2px 8px; white-space:nowrap; }
@@ -840,7 +844,7 @@
           </div></div>` : ""}
         </div>
         <div class="card">
-          <div class="h">Alle Sessions <small>${liste.length} von ${alle.length}</small></div>
+          <div class="h">Alle Sessions <span class="hr"><small>${liste.length} von ${alle.length}</small><button class="link edit" id="import">Aus App importieren</button></span></div>
           ${liste.length ? `<div class="scroll"><table class="tbl liste">
             <thead><tr>${th("datum", "Datum")}<th>Art</th><th class="hm">Ort</th><th>Blinds</th>${th("dauer", "Dauer", "num hm")}${th("einsatz", "Einsatz", "num")}${th(key === "verlust" ? "verlust" : "gewinn", key === "verlust" ? "Verlust" : "Gewinn", "num")}<th class="num hm">€/h</th><th></th></tr></thead>
             <tbody>${zeilen}</tbody>${fuss}</table></div>` : '<div class="leer">Keine Sessions für diese Auswahl.</div>'}
@@ -866,6 +870,8 @@
         if (quelle === "runde") this._oeffneForm(x.tag);
         else this._oeffneSession(x.session);
       }));
+      const imp = r.querySelector("#import");
+      if (imp) imp.addEventListener("click", () => this._oeffneImport());
       const alle = this._ichAlle || [];
       if (alle.length) this._beobachteChart((w, h) => this._chartIch(alle, w, h));
     }
@@ -982,6 +988,56 @@
       $("#s-speichern").addEventListener("click", () => this._speichereSession());
       if (f.id) $("#s-loeschen").addEventListener("click", () => this._loescheSession());
       this._sessionInfo();
+    }
+
+    _oeffneImport() {
+      this._form = null; this._sform = null;
+      this._modal.innerHTML = `
+        <div class="overlay" id="ov">
+          <div class="dlg" role="dialog" aria-modal="true" aria-labelledby="dt">
+            <h2 id="dt">Sessions aus App importieren</h2>
+            <div class="sub">Export deiner Poker-Tracking-App inklusive Kopfzeile hier einfügen (Spalten wie id, starttime, endtime, location, type, cashout, totalprofit). Bereits importierte Sessions werden anhand der id übersprungen – du kannst also jederzeit den kompletten Export erneut einfügen.</div>
+            <textarea id="imp-text" rows="10" spellcheck="false" placeholder="id&#9;starttime&#9;endtime&#9;…"></textarea>
+            <div class="sub" style="margin:8px 0 0">Einsatz wird als Cashout minus Ergebnis berechnet und enthält damit auch Rebuys.</div>
+            <div id="imp-info"></div>
+            <div class="msg" id="msg"></div>
+            <div class="fuss">
+              <button class="btn" id="abbr">Abbrechen</button>
+              <button class="btn gold" id="imp-los">Importieren</button>
+            </div>
+          </div>
+        </div>`;
+      const $ = (q) => this._modal.querySelector(q);
+      const zu = () => { this._modal.innerHTML = ""; };
+      $("#ov").addEventListener("click", (ev) => { if (ev.target.id === "ov") zu(); });
+      $("#abbr").addEventListener("click", zu);
+      const ta = $("#imp-text");
+      ta.addEventListener("input", () => {
+        const n = ta.value.split("\n").filter((z) => z.trim()).length - 1;
+        $("#imp-info").innerHTML = n > 0 ? `<div class="sub" style="margin:8px 0 0">${n} ${n === 1 ? "Zeile" : "Zeilen"} erkannt</div>` : "";
+        $("#msg").textContent = "";
+      });
+      $("#imp-los").addEventListener("click", async () => {
+        const btn = $("#imp-los");
+        if (btn.dataset.fertig) return zu();
+        if (!ta.value.trim()) { $("#msg").textContent = "Bitte zuerst den Export einfügen."; return; }
+        btn.disabled = true; btn.textContent = "Importiert …";
+        try {
+          const res = await this._hass.callWS({ type: "call_service", domain: "poker_home_games", service: "sessions_importieren",
+            service_data: { text: ta.value }, return_response: true });
+          const r = (res && res.response) || {};
+          const f = r.fehler || [];
+          $("#imp-info").innerHTML = `<div class="summe ${f.length ? "nok" : "ok"}"><div><b>${r.importiert || 0} ${r.importiert === 1 ? "Session" : "Sessions"} importiert</b>
+            <div style="font-size:12px;color:${C.muted};margin-top:2px">${r.uebersprungen || 0} schon vorhanden${f.length ? ` · ${f.length} Zeilen mit Fehlern: ${esc(f.slice(0, 3).join("; "))}${f.length > 3 ? " …" : ""}` : ""}</div></div></div>`;
+          btn.disabled = false; btn.textContent = "Fertig"; btn.dataset.fertig = "1";
+          $("#abbr").style.display = "none";
+          if (r.importiert) this._toast(`${r.importiert} Sessions importiert`);
+        } catch (err) {
+          btn.disabled = false; btn.textContent = "Importieren";
+          $("#msg").textContent = (err && err.message) || "Import fehlgeschlagen.";
+        }
+      });
+      setTimeout(() => ta.focus(), 50);
     }
 
     _sessionInfo() {

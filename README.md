@@ -79,6 +79,7 @@ data:
 - **Aktion** `poker_home_games.spieltag_bearbeiten` – wie `spieltag_eintragen`, zusätzlich mit `id`; ersetzt den Spieltag komplett
 - **Aktion** `poker_home_games.spieltag_loeschen` – löscht den Spieltag mit der angegebenen `id`
 - **Aktion** `poker_home_games.letzten_spieltag_loeschen`
+- **Import aus Tracking-App:** In „Meine Spiele“ → „Aus App importieren“ den Export (Tabelle mit `id`, `starttime`, `endtime`, `location`, `type`, `cashout`, `totalprofit` …) einfügen. Bereits importierte IDs werden übersprungen; Einsatz = Cashout − Ergebnis (inkl. Rebuys). Als Aktion: `poker_home_games.sessions_importieren` mit `text`.
 - **Aktionen** `poker_home_games.session_eintragen`, `session_bearbeiten`, `session_loeschen`, `sessions_abrufen` für eigene Sessions außerhalb der Runde (Felder: `datum`, `beginn`, `ende`, `art` = casino/home_game/online/sonstiges, `spielart` = cash/turnier, `blinds`, `ort`, `einsatz`, `gewinn`, `notiz`)
 - **Aktion** `poker_home_games.spieltage_abrufen` liefert alle Spieltage mit Einzelergebnissen als Antwort (nutzt die Karte für „Alle Spiele“)
 

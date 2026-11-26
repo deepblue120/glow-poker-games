@@ -192,3 +192,11 @@ session_loeschen:
         text:
 
 sessions_abrufen:
+
+sessions_importieren:
+  fields:
+    text:
+      required: true
+      selector:
+        text:
+          multiline: true
