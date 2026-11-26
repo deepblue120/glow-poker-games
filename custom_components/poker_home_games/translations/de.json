@@ -1,0 +1,104 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Poker Home Games einrichten",
+        "description": "Bisherige Ergebnisse können aus einer CSV-Datei übernommen werden (Spalten datum;bezeichnung;spieler;einsatz;endstand;gewinn). Ohne Import gib die Spieler kommagetrennt an.",
+        "data": {
+          "import_pfad": "CSV-Datei für den Import (optional)",
+          "spieler": "Spieler, kommagetrennt (optional)"
+        }
+      }
+    },
+    "error": {
+      "datei_fehlt": "Datei nicht gefunden.",
+      "csv_fehler": "CSV konnte nicht gelesen werden: {fehler}",
+      "keine_spieler": "Bitte eine CSV-Datei oder mindestens einen Spieler angeben."
+    },
+    "abort": {
+      "already_configured": "Poker Home Games ist bereits eingerichtet.",
+      "single_instance_allowed": "Poker Home Games ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Poker Home Games",
+        "menu_options": {
+          "spieltag": "Spieltag eintragen",
+          "spieler_hinzufuegen": "Spieler hinzufügen",
+          "spieler_verwalten": "Aktive Spieler festlegen",
+          "letzten_loeschen": "Letzten Spieltag löschen"
+        }
+      },
+      "spieltag": {
+        "title": "Spieltag eintragen (1/2)",
+        "description": "Wann wurde gespielt und wer war dabei?",
+        "data": {
+          "datum": "Datum",
+          "beginn": "Beginn",
+          "ende": "Ende",
+          "bezeichnung": "Bezeichnung (optional, z. B. Malle)",
+          "spieler": "Spieler"
+        }
+      },
+      "ergebnisse": {
+        "title": "Ergebnisse vom {datum} (2/2)",
+        "description": "Einsatz = gesamter Buy-in inklusive Rebuys. Gewinn = Endstand minus Einsatz, Verluste negativ eintragen. Die Gewinne aller Spieler sollten zusammen 0 ergeben.",
+        "data": {
+          "trotzdem_speichern": "Trotzdem speichern, obwohl die Summe nicht 0 ist"
+        }
+      },
+      "spieler_hinzufuegen": {
+        "title": "Spieler hinzufügen",
+        "data": {
+          "name": "Name"
+        }
+      },
+      "spieler_verwalten": {
+        "title": "Aktive Spieler",
+        "description": "Nur aktive Spieler werden beim Eintragen vorgeschlagen. Die Ergebnisse inaktiver Spieler bleiben erhalten.",
+        "data": {
+          "aktiv": "Aktive Spieler"
+        }
+      },
+      "letzten_loeschen": {
+        "title": "Letzten Spieltag löschen",
+        "description": "Spieltag {spieltag}: {ergebnisse}",
+        "data": {
+          "bestaetigen": "Ja, diesen Spieltag löschen"
+        }
+      }
+    },
+    "error": {
+      "keine_auswahl": "Mindestens einen Spieler auswählen.",
+      "einsatz_fehlt": "Der Einsatz muss größer als 0 sein.",
+      "verlust_zu_hoch": "Der Verlust kann nicht größer als der Einsatz sein.",
+      "summe_nicht_null": "Die Gewinne ergeben zusammen {summe} € statt 0 €. Bitte prüfen oder „Trotzdem speichern“ anhaken.",
+      "name_leer": "Bitte einen Namen eingeben.",
+      "name_vorhanden": "Diesen Spieler gibt es schon.",
+      "nicht_bestaetigt": "Bitte bestätigen."
+    },
+    "abort": {
+      "keine_spieltage": "Es sind noch keine Spieltage gespeichert."
+    }
+  },
+  "services": {
+    "spieltag_eintragen": {
+      "name": "Spieltag eintragen",
+      "description": "Speichert die Ergebnisse eines Spieltags.",
+      "fields": {
+        "datum": {"name": "Datum", "description": "Tag des Spiels."},
+        "beginn": {"name": "Beginn", "description": "Uhrzeit Spielbeginn."},
+        "ende": {"name": "Ende", "description": "Uhrzeit Spielende (nach Mitternacht ist erlaubt)."},
+        "bezeichnung": {"name": "Bezeichnung", "description": "Optional, z. B. Malle."},
+        "ergebnisse": {"name": "Ergebnisse", "description": "Liste mit spieler, einsatz und gewinn je Spieler."},
+        "summe_ignorieren": {"name": "Summe ignorieren", "description": "Auch speichern, wenn die Gewinne zusammen nicht 0 ergeben."}
+      }
+    },
+    "letzten_spieltag_loeschen": {
+      "name": "Letzten Spieltag löschen",
+      "description": "Entfernt den zuletzt gespielten Spieltag."
+    }
+  }
+}

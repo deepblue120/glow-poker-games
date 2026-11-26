@@ -1,0 +1,26 @@
+spieltag_eintragen:
+  fields:
+    datum:
+      required: true
+      selector:
+        date:
+    beginn:
+      selector:
+        time:
+    ende:
+      selector:
+        time:
+    bezeichnung:
+      selector:
+        text:
+    ergebnisse:
+      required: true
+      example: '[{"spieler": "Christian", "einsatz": 40, "gewinn": 25.5}, {"spieler": "Jan", "einsatz": 40, "gewinn": -25.5}]'
+      selector:
+        object:
+    summe_ignorieren:
+      default: false
+      selector:
+        boolean:
+
+letzten_spieltag_loeschen:
