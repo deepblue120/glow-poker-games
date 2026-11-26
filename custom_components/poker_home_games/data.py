@@ -302,10 +302,18 @@ class PokerData:
                 "einsatz": 0.0, "endstand": 0.0, "gewinn": 0.0, "spiele": 0,
                 "plus": 0, "minus": 0, "stunden": 0.0, "_gewinn_mit_zeit": 0.0,
                 "bester_spieltag": None, "schlechtester_spieltag": None,
+                "bester_spieltag_datum": None, "bester_spieltag_ort": "",
+                "schlechtester_spieltag_datum": None, "schlechtester_spieltag_ort": "",
             }
             for pid, sp in self.spieler.items()
         }
         stunden_gesamt = 0.0
+        groesster_topf: dict[str, Any] | None = None
+        laengster: dict[str, Any] | None = None
+
+        def wo(tag: dict[str, Any]) -> str:
+            return (tag.get("ort") or tag.get("bezeichnung") or "").strip()
+
         tage = self.sortiert()
         verlauf: list[dict[str, Any]] = []
         kumuliert: dict[str, float] = {}
@@ -313,6 +321,13 @@ class PokerData:
             dauer = dauer_stunden(tag)
             if dauer:
                 stunden_gesamt += dauer
+                if laengster is None or dauer > laengster["wert"]:
+                    laengster = {"wert": dauer, "datum": tag["datum"], "ort": wo(tag),
+                                 "beginn": tag.get("beginn"), "ende": tag.get("ende")}
+            topf = _r(sum(e["einsatz"] for e in tag["ergebnisse"]))
+            if groesster_topf is None or topf > groesster_topf["wert"]:
+                groesster_topf = {"wert": topf, "datum": tag["datum"], "ort": wo(tag),
+                                  "spieler": len(tag["ergebnisse"])}
             for erg in tag["ergebnisse"]:
                 w = werte.get(erg["spieler"])
                 if w is None:
@@ -329,8 +344,12 @@ class PokerData:
                     w["_gewinn_mit_zeit"] += g
                 if w["bester_spieltag"] is None or g > w["bester_spieltag"]:
                     w["bester_spieltag"] = g
+                    w["bester_spieltag_datum"] = tag["datum"]
+                    w["bester_spieltag_ort"] = wo(tag)
                 if w["schlechtester_spieltag"] is None or g < w["schlechtester_spieltag"]:
                     w["schlechtester_spieltag"] = g
+                    w["schlechtester_spieltag_datum"] = tag["datum"]
+                    w["schlechtester_spieltag_ort"] = wo(tag)
                 kumuliert[erg["spieler"]] = _r(kumuliert.get(erg["spieler"], 0.0) + g)
             verlauf.append(
                 {"datum": tag["datum"], "bezeichnung": tag.get("bezeichnung") or "",
@@ -366,6 +385,7 @@ class PokerData:
             "verlauf": verlauf,
             "orte": self._orte(tage),
             "nach_ort": self._nach_ort(tage),
+            "rekorde": {"groesster_topf": groesster_topf, "laengster_abend": laengster},
             "aktualisiert": self._stand,
             "anzahl_sessions": len(self.sessions),
             "spieler_liste": [

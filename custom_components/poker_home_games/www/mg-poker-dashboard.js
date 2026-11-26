@@ -14,7 +14,7 @@
  *   # ich_titel: Meine Spiele
  */
 (() => {
-  const VERSION = "1.7.0";
+  const VERSION = "1.8.0";
   const TAG = "mg-poker-dashboard";
 
   const DEFAULTS = {
@@ -262,6 +262,11 @@
     .dot { width:10px; height:10px; border-radius:50%; flex:none; }
     .art { display:inline-block; font-size:12px; font-weight:600; border:1px solid; border-radius:8px; padding:2px 8px; white-space:nowrap; }
     .rekorde.r3 { grid-template-columns:repeat(3,minmax(0,1fr)); }
+    .rekorde.r6 { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .tile.rk .rkh { display:flex; align-items:baseline; justify-content:space-between; gap:8px; margin-top:3px; min-width:0; }
+    .tile.rk .tv { margin-top:0; font-size:17px; }
+    .tile.rk .tv { flex:0 1 auto; min-width:3.5em; }
+    .tile.rk .rkw { font-weight:700; font-size:14px; white-space:nowrap; font-variant-numeric:tabular-nums; overflow:hidden; text-overflow:ellipsis; min-width:0; flex:0 1 auto; }
     .grid.ich .chartbox { height:300px; }
     .tbl tfoot td { border-top:1px solid rgba(255,255,255,0.22); font-weight:700; }
     .btn.rot { color:${C.red}; border-color:${C.red}66; background:${C.red}10; }
@@ -305,7 +310,14 @@
       .seite-uebersicht .fill { flex:1; min-height:0; }
       .seite-uebersicht .fillbody { flex:1; overflow:auto; }
       .seite-uebersicht .chartbox { height:auto; overflow:hidden; }
-      .seite-uebersicht .paar { gap:14px; }
+      .seite-uebersicht .paar { gap:14px; flex:1.25; min-height:0; }
+      .seite-uebersicht .col:last-child > .fill { flex:1; }
+      .seite-uebersicht .paar > .card { display:flex; flex-direction:column; min-height:0; overflow:auto; }
+      .seite-uebersicht .paar .ergl { gap:6px 16px; }
+      .seite-uebersicht .paar .el { font-size:14.5px; padding:6px 10px; }
+      .seite-uebersicht .paar .lmeta { font-size:13px; margin-top:12px; }
+      .seite-uebersicht .paar .aktionen { margin-top:auto; padding-top:10px; }
+      .seite-uebersicht .rekorde.r6 { gap:8px; }
       .seite-uebersicht .row { padding:6px 0; }
       .seite-uebersicht .rn, .seite-uebersicht .rg { font-size:14px; }
       .seite-uebersicht .bar { margin-top:5px; }
@@ -332,6 +344,15 @@
       .seite-uebersicht .rs { display:none; }
       .seite-uebersicht .row { padding:6px 0; }
       .seite-uebersicht .meta .ts { display:none; }
+      .seite-uebersicht .paar { flex:2.1; }
+      .seite-uebersicht .paar .el { font-size:13.5px; padding:3px 8px; }
+      .seite-uebersicht .paar .ergl { gap:2px 14px; }
+      .seite-uebersicht .paar .lmeta { margin-top:8px; font-size:12px; }
+      .seite-uebersicht .paar .aktionen { padding-top:6px; }
+      .seite-uebersicht .tile.rk { padding:6px 10px; }
+      .seite-uebersicht .tile.rk .tv { font-size:15px; }
+      .seite-uebersicht .tile.rk .tl { font-size:10px; }
+      .seite-uebersicht .tile.rk .ts { font-size:11px; }
     }
     @media (max-width: 1280px) { .hinweis { display:none; } }
     @media (max-width: 1099px) {
@@ -446,6 +467,7 @@
         spieler: a.spieler_liste || [],
         orte: a.orte || [],
         nachOrt: a.nach_ort || {},
+        rekordeG: a.rekorde || {},
       };
     }
 
@@ -815,7 +837,7 @@
       const lieblingsort = gruppe("ort").sort((a, b) => b[1].n - a[1].n || b[1].g - a[1].g)[0];
       const besteBlinds = gruppe("blinds").sort((a, b) => b[1].g - a[1].g)[0];
       const plus = alle.filter((x) => x.gewinn > 0).length, minus = alle.filter((x) => x.gewinn < 0).length;
-      const beschr = (x) => `${datumDe(x.datum)} · ${esc(ARTEN[x.art].label)}`;
+      const beschr = (x) => [`${WT[new Date(x.datum + "T12:00:00").getDay()]} ${datumDe(x.datum)}`, x.ort || ARTEN[x.art].label].map(esc).join(" · ");
       const rekorde = `<div class="rekorde r3">
         ${this._tile("Beste Session", best ? `<span style="color:${vz(best.gewinn)}">${eur(best.gewinn)}</span>` : "–", best ? beschr(best) : "")}
         ${this._tile("Schlechteste Session", worst ? `<span style="color:${vz(worst.gewinn)}">${eur(worst.gewinn)}</span>` : "–", worst ? beschr(worst) : "")}
@@ -1393,18 +1415,25 @@
     _rekorde(d) {
       const r = d.rangliste;
       if (!r.length) return `<div class="leer">Noch keine Rekorde.</div>`;
+      const g = d.rekordeG || {};
       const best = (key, fn, filter = () => true) => r.filter(filter).filter((x) => x[key] != null).sort(fn)[0];
       const hoch = best("bester_spieltag", (a, b) => b.bester_spieltag - a.bester_spieltag);
       const tief = best("schlechtester_spieltag", (a, b) => a.schlechtester_spieltag - b.schlechtester_spieltag);
       const quote = best("quote", (a, b) => b.quote - a.quote, (x) => x.spiele >= 10);
       const std = best("gewinn_pro_stunde", (a, b) => b.gewinn_pro_stunde - a.gewinn_pro_stunde, (x) => x.stunden >= 6);
-      const treu = best("spiele", (a, b) => b.spiele - a.spiele);
-      const t = (l, x, wert) => this._tile(l, x ? esc(x.name) : "–", x ? wert(x) : "");
-      return `<div class="rekorde">
-        ${t("Höchster Abendgewinn", hoch, (x) => eur(x.bester_spieltag))}
-        ${t("Höchster Abendverlust", tief, (x) => eur(x.schlechtester_spieltag))}
-        ${t("Beste Gewinnquote", quote, (x) => `${zahl(x.quote, 1)} % (ab 10 Spielen)`)}
-        ${std ? t("Bester Stundenlohn", std, (x) => `${eur(x.gewinn_pro_stunde)}/h`) : t("Immer dabei", treu, (x) => `${x.spiele} Spieltage`)}
+      const wann = (datum, ort) => [datum ? `${WT[new Date(datum + "T12:00:00").getDay()]} ${datumDe(datum)}` : "", ort].filter(Boolean).map(esc).join(" · ");
+      const kachel = (label, haupt, wert, wo, farbe) => `<div class="tile rk">
+          <div class="tl">${label}</div>
+          <div class="rkh"><span class="tv">${haupt}</span><span class="rkw" ${farbe ? `style="color:${farbe}"` : ""}>${wert}</span></div>
+          <div class="ts">${wo || "&nbsp;"}</div></div>`;
+      const t = g.groesster_topf, l = g.laengster_abend;
+      return `<div class="rekorde r6">
+        ${kachel("Höchster Abendgewinn", hoch ? esc(hoch.name) : "–", hoch ? eur(hoch.bester_spieltag) : "", hoch ? wann(hoch.bester_spieltag_datum, hoch.bester_spieltag_ort) : "", hoch ? vz(hoch.bester_spieltag) : "")}
+        ${kachel("Höchster Abendverlust", tief ? esc(tief.name) : "–", tief ? eur(tief.schlechtester_spieltag) : "", tief ? wann(tief.schlechtester_spieltag_datum, tief.schlechtester_spieltag_ort) : "", tief ? vz(tief.schlechtester_spieltag) : "")}
+        ${kachel("Größter Topf", t ? zahl(t.wert, 0) + " €" : "–", t ? `${t.spieler} Spieler` : "", t ? wann(t.datum, t.ort) : "")}
+        ${kachel("Längster Abend", l ? zahl(l.wert, 1) + " h" : "–", l && l.beginn ? zeitText(l.beginn, l.ende) : "", l ? wann(l.datum, l.ort) : "Uhrzeiten nachtragen")}
+        ${kachel("Beste Gewinnquote", quote ? esc(quote.name) : "–", quote ? zahl(quote.quote, 1) + " %" : "", quote ? `${quote.plus} von ${quote.plus + quote.minus} Abenden im Plus` : "ab 10 Spielen")}
+        ${kachel("Bester Stundenlohn", std ? esc(std.name) : "–", std ? eur(std.gewinn_pro_stunde) + "/h" : "", std ? `über ${zahl(std.stunden, 0)} h Spielzeit` : "ab 6 h mit Uhrzeit")}
       </div>`;
     }
 
