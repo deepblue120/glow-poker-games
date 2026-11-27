@@ -8,6 +8,7 @@ Home-Assistant-Integration für die Ergebnisse von Poker-Home-Games – mit eige
 - Ewige Tabelle mit Gewinn, Ø pro Spieltag, ROI, Gewinnquote und Gewinn pro Stunde
 - Podium, letzter Spieltag, Verlaufsgraph und Rekorde in einer Panel-Karte
 - Übersicht passt im Browser komplett auf einen Bildschirm (ideal für Screenshots)
+- Ewige Tabelle mit Tendenz (Positionswechsel durch die letzten drei Spieltage) und Auswahl Gesamt / einzelne Jahre
 - Podium umschaltbar: Gesamt, Ø pro Spiel (ab 5 Spielen) oder nach Spielort
 - Uhrzeiten für viele Spieltage auf einmal nachtragen (in „Alle Spiele“, mit Vorlage für alle leeren Felder)
 - Mehrtägige Spieltage (z. B. Trips): Enddatum und optional Tagesergebnisse je Tag; das Gesamtergebnis wird daraus berechnet, in „Alle Spiele“ lassen sich die Tage aufklappen

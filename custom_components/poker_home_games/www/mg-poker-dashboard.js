@@ -14,7 +14,7 @@
  *   # ich_titel: Meine Spiele
  */
 (() => {
-  const VERSION = "1.10.0";
+  const VERSION = "1.11.0";
   const TAG = "mg-poker-dashboard";
 
   const DEFAULTS = {
@@ -156,14 +156,20 @@
     .row { padding:11px 0; border-top:1px solid ${C.tileBorder}; }
     .row:first-child { border-top:none; padding-top:2px; }
     .rz { display:flex; align-items:center; gap:12px; }
+    .tend { width:30px; flex:none; font-size:11.5px; font-weight:700; font-variant-numeric:tabular-nums; text-align:center; border-radius:6px; padding:1px 0; }
+    .tend.auf { color:${C.green}; background:${C.green}18; }
+    .tend.ab { color:${C.red}; background:${C.red}18; }
+    .tend.gleich { color:${C.muted}; font-size:9px; }
+    .tend.neu { color:${C.cyan}; background:${C.cyan}18; font-size:10px; font-weight:600; }
     .rnr { width:22px; color:${C.muted}; font-size:13px; font-variant-numeric:tabular-nums; }
     .rn { flex:1; font-weight:600; font-size:15px; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .rn .inaktiv { color:${C.muted}; font-weight:400; font-size:12px; margin-left:6px; }
     .rg { font-weight:700; font-size:15px; font-variant-numeric:tabular-nums; }
-    .bar { margin:7px 0 0 34px; height:6px; border-radius:3px; background:rgba(255,255,255,0.05); position:relative; }
+    .bar { margin:7px 0 0 76px; height:6px; border-radius:3px; background:rgba(255,255,255,0.05); position:relative; }
     .bar i { position:absolute; top:0; height:6px; border-radius:3px; }
     .bar b { position:absolute; left:50%; top:-3px; width:1px; height:12px; background:rgba(255,255,255,0.25); }
-    .rs { margin:6px 0 0 34px; font-size:12px; color:${C.muted}; display:flex; flex-wrap:wrap; gap:4px 14px; }
+    .rs { margin:6px 0 0 76px; font-size:12px; color:${C.muted}; display:flex; flex-wrap:wrap; gap:4px 14px; }
+    .grid.ich .bar, .grid.ich .rs { margin-left:22px; }
 
     .chips { display:flex; flex-wrap:wrap; gap:8px; }
     .erg { border-radius:12px; padding:7px 12px; font-size:13.5px; font-weight:600; display:inline-flex; gap:8px; align-items:baseline; }
@@ -459,6 +465,7 @@
       this._ichJahr = "alle";
       this._ichBlinds = "alle";
       this._podiumModus = "gesamt";
+      this._tabJahr = "gesamt";
       this._podiumOrt = null;
       this._sform = null;
       this._entityId = null;
@@ -514,6 +521,7 @@
         orte: a.orte || [],
         nachOrt: a.nach_ort || {},
         rekordeG: a.rekorde || {},
+        nachJahr: a.nach_jahr || {},
       };
     }
 
@@ -567,6 +575,8 @@
       this._root.querySelectorAll("[data-podium]").forEach((b) => b.addEventListener("click", () => {
         this._podiumModus = b.dataset.podium; this._renderMain();
       }));
+      const tj = this._root.querySelector("#tab-jahr");
+      if (tj) tj.addEventListener("change", () => { this._tabJahr = tj.value; this._renderMain(); });
       const ow = this._root.querySelector("#podium-ort");
       if (ow) ow.addEventListener("change", () => { this._podiumOrt = ow.value; this._renderMain(); });
       const del = this._root.querySelector("#loeschen");
@@ -585,7 +595,7 @@
         <div class="grid ueb">
           <div class="col">
             <div class="card">${this._podium(d)}</div>
-            <div class="card fill"><div class="h">Ewige Tabelle <small>${d.rangliste.length} Spieler</small></div><div class="fillbody">${this._tabelle(d)}</div></div>
+            <div class="card fill">${this._tabelleKopf(d)}<div class="fillbody">${this._tabelle(d)}</div></div>
           </div>
           <div class="col">
             <div class="card fill"><div class="h">Verlauf <small>Kontostand über alle Spieltage</small></div><div class="fillbody chartbox" id="chartbox"></div></div>
@@ -1404,16 +1414,47 @@
       return `${kopf}<div class="podium">${platz(1)}${platz(0)}${platz(2)}</div>`;
     }
 
+    _tabellenDaten(d) {
+      const jahre = Object.keys(d.nachJahr || {}).sort().reverse();
+      const jahr = this._tabJahr !== "gesamt" && jahre.includes(this._tabJahr) ? this._tabJahr : "gesamt";
+      if (jahr === "gesamt") return { jahr, jahre, liste: d.rangliste, spieltage: d.spieltage };
+      const j = d.nachJahr[jahr];
+      return { jahr, jahre, liste: j.rangliste || [], spieltage: j.spieltage || 0 };
+    }
+
+    _tabelleKopf(d) {
+      const t = this._tabellenDaten(d);
+      const wahl = t.jahre.length
+        ? `<select class="ortwahl" id="tab-jahr" aria-label="Zeitraum der Tabelle">
+            <option value="gesamt" ${t.jahr === "gesamt" ? "selected" : ""}>Gesamt</option>
+            ${t.jahre.map((j) => `<option value="${j}" ${t.jahr === j ? "selected" : ""}>${j}</option>`).join("")}
+          </select>`
+        : "";
+      const titel = t.jahr === "gesamt" ? "Ewige Tabelle" : `Tabelle ${t.jahr}`;
+      return `<div class="h">${titel} <span class="segs"><small>${t.liste.length} Spieler · ${t.spieltage} Spieltage</small>${wahl}</span></div>`;
+    }
+
+    _tendenz(x) {
+      if (x.neu) return `<span class="tend neu" title="vor drei Spieltagen noch nicht in der Tabelle">neu</span>`;
+      if (x.tendenz == null) return `<span class="tend leer"></span>`;
+      if (x.tendenz > 0) return `<span class="tend auf" title="${x.tendenz} ${x.tendenz === 1 ? "Platz" : "Plätze"} gewonnen in den letzten drei Spieltagen">▲${x.tendenz}</span>`;
+      if (x.tendenz < 0) return `<span class="tend ab" title="${-x.tendenz} ${x.tendenz === -1 ? "Platz" : "Plätze"} verloren in den letzten drei Spieltagen">▼${-x.tendenz}</span>`;
+      return `<span class="tend gleich" title="unverändert in den letzten drei Spieltagen">●</span>`;
+    }
+
     _tabelle(d) {
-      if (!d.rangliste.length) return `<div class="leer">Trag den ersten Spieltag ein, dann erscheint hier die Tabelle.</div>`;
-      const mx = Math.max(1, ...d.rangliste.map((x) => Math.abs(x.gewinn)));
-      return d.rangliste.map((x) => {
+      const t = this._tabellenDaten(d);
+      const liste = t.liste;
+      if (!liste.length) return `<div class="leer">Trag den ersten Spieltag ein, dann erscheint hier die Tabelle.</div>`;
+      const mx = Math.max(1, ...liste.map((x) => Math.abs(x.gewinn)));
+      return liste.map((x) => {
         const w = Math.max(1.5, (Math.abs(x.gewinn) / mx) * 50);
         const pos = x.gewinn >= 0;
         const proStd = x.gewinn_pro_stunde != null ? `<span>${eur(x.gewinn_pro_stunde)}/h</span>` : "";
         return `<div class="row">
           <div class="rz">
             <div class="rnr">${x.platz}</div>
+            ${this._tendenz(x)}
             <div class="rn">${esc(x.name)}${x.aktiv === false ? '<span class="inaktiv">inaktiv</span>' : ""}</div>
             <div class="rg" style="color:${vz(x.gewinn)}">${eur(x.gewinn)}</div>
           </div>

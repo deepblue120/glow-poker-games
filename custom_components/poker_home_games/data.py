@@ -427,10 +427,11 @@ class PokerData:
                 w[key] = _r(w[key])
 
         rangliste = sorted(
-            (w for w in werte.values() if w["spiele"]), key=lambda w: -w["gewinn"]
+            (w for w in werte.values() if w["spiele"]), key=lambda w: (-w["gewinn"], w["name"])
         )
         for platz, w in enumerate(rangliste, 1):
             w["platz"] = platz
+        self._setze_tendenz(rangliste, tage)
 
         self._statistik = {
             "spieler": werte,
@@ -444,6 +445,7 @@ class PokerData:
             "orte": self._orte(tage),
             "nach_ort": self._nach_ort(tage),
             "rekorde": {"groesster_topf": groesster_topf, "laengster_abend": laengster},
+            "nach_jahr": self._nach_jahr(tage),
             "aktualisiert": self._stand,
             "anzahl_sessions": len(self.sessions),
             "spieler_liste": [
@@ -600,6 +602,76 @@ class PokerData:
         if importiert:
             await self.async_save()
         return {"importiert": importiert, "uebersprungen": uebersprungen, "fehler": fehler}
+
+    # ------------------------------------------------------------ Tabellen je Zeitraum
+    TENDENZ_SPIELE = 3
+
+    def _tabelle_aus(self, tage: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Kompakte Rangliste für eine Auswahl an Spieltagen."""
+        werte: dict[str, dict[str, Any]] = {}
+        for tag in tage:
+            dauer = dauer_stunden(tag)
+            for erg in tag["ergebnisse"]:
+                pid = erg["spieler"]
+                w = werte.setdefault(pid, {
+                    "id": pid, "name": self.spieler.get(pid, {}).get("name", pid),
+                    "aktiv": self.spieler.get(pid, {}).get("aktiv", True),
+                    "einsatz": 0.0, "endstand": 0.0, "gewinn": 0.0, "spiele": 0,
+                    "plus": 0, "minus": 0, "stunden": 0.0, "_gz": 0.0,
+                })
+                g = erg["gewinn"]
+                w["einsatz"] += erg["einsatz"]
+                w["endstand"] += erg["einsatz"] + g
+                w["gewinn"] += g
+                w["spiele"] += 1
+                w["plus"] += g > 0
+                w["minus"] += g < 0
+                if dauer:
+                    w["stunden"] += dauer
+                    w["_gz"] += g
+        liste = []
+        for w in werte.values():
+            sp, ent = w["spiele"], w["plus"] + w["minus"]
+            w["gewinn_avg"] = _r(w["gewinn"] / sp) if sp else 0.0
+            w["roi"] = round(w["endstand"] / w["einsatz"] * 100, 1) if w["einsatz"] else 0.0
+            w["quote"] = round(w["plus"] / ent * 100, 1) if ent else 0.0
+            w["gewinn_pro_stunde"] = _r(w["_gz"] / w["stunden"]) if w["stunden"] else None
+            del w["_gz"]
+            for k in ("einsatz", "endstand", "gewinn", "stunden"):
+                w[k] = _r(w[k])
+            liste.append(w)
+        liste.sort(key=lambda w: (-w["gewinn"], w["name"]))
+        for platz, w in enumerate(liste, 1):
+            w["platz"] = platz
+        return liste
+
+    def _setze_tendenz(self, liste: list[dict[str, Any]], tage: list[dict[str, Any]]) -> None:
+        """Positionswechsel gegenüber dem Stand vor den letzten drei Spieltagen.
+
+        tendenz > 0: Plätze gewonnen, < 0: verloren, 0: unverändert,
+        None mit neu=True: vor drei Spieltagen noch nicht in der Tabelle.
+        Bei höchstens drei Spieltagen gibt es keine Tendenz (None, neu=False).
+        """
+        if len(tage) <= self.TENDENZ_SPIELE:
+            for w in liste:
+                w["tendenz"], w["neu"] = None, False
+            return
+        vorher = {w["id"]: w["platz"] for w in self._tabelle_aus(tage[: -self.TENDENZ_SPIELE])}
+        for w in liste:
+            alt = vorher.get(w["id"])
+            w["tendenz"] = None if alt is None else alt - w["platz"]
+            w["neu"] = alt is None
+
+    def _nach_jahr(self, tage: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+        jahre: dict[str, list[dict[str, Any]]] = {}
+        for tag in tage:
+            jahre.setdefault(tag["datum"][:4], []).append(tag)
+        ergebnis = {}
+        for jahr, liste_tage in sorted(jahre.items(), reverse=True):
+            tabelle = self._tabelle_aus(liste_tage)
+            self._setze_tendenz(tabelle, liste_tage)
+            ergebnis[jahr] = {"spieltage": len(liste_tage), "rangliste": tabelle}
+        return ergebnis
 
     def _nach_ort(self, tage: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
         """Gewinn und Spiele je Spieler, getrennt nach Spielort."""
